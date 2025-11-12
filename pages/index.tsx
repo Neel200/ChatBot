@@ -138,7 +138,9 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-4 py-6">
         <div
           ref={chatRef}
-          className="w-full max-w-3xl flex-1 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg overflow-y-auto p-6 border border-white/20"
+          className={`w-full max-w-3xl flex-1 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg ${
+          messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"
+          } p-6 border border-white/20`}
         >
           {messages.length === 0 && !loading && (
             <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-4">
