@@ -146,7 +146,14 @@ export default function ChatPage() {
       },
     };
 
-    return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{text}</ReactMarkdown>;
+    return (
+      <div className="overflow-x-auto max-w-full">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {text}
+        </ReactMarkdown>
+      </div>
+    );
+
   };
 
   return (
