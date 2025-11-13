@@ -215,39 +215,60 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="w-full max-w-3xl bg-white/20 backdrop-blur-md border border-white/30 mt-3 sm:mt-4 rounded-xl shadow-lg p-2 sm:p-3">
-          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 items-stretch sm:items-center">
+        {/* Input Area (ChatGPT-style) */}
+        <div className="w-full max-w-3xl mt-3 sm:mt-4 px-2">
+          <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md px-3 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="border border-gray-300/50 rounded-lg p-3 flex-grow focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white/80 text-sm sm:text-base"
+              className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-sm sm:text-base pr-12"
               placeholder="Type your message..."
             />
+
+            {/* Send / Stop buttons */}
             {!loading ? (
               <button
                 onClick={sendMessage}
                 disabled={!input.trim()}
-                className={`w-full sm:w-auto px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${
+                className={`absolute right-3 flex items-center justify-center w-8 h-8 rounded-full transition ${
                   input.trim()
-                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                    : "bg-gray-400 text-gray-200 cursor-not-allowed"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                Send
+                {/* Send Icon */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12l14-7-4 7 4 7-14-7z" />
+                </svg>
               </button>
             ) : (
               <button
                 onClick={stopGenerating}
-                className="w-full sm:w-auto bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-medium text-sm sm:text-base"
+                className="absolute right-3 flex items-center justify-center w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white transition"
               >
-                Stop
+                {/* Stop (square) icon */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  className="w-3.5 h-3.5"
+                >
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                </svg>
               </button>
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
