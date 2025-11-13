@@ -156,13 +156,14 @@ export default function ChatPage() {
         <div
           ref={chatRef}
           className={`w-full max-w-3xl flex-1 min-h-0 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20
-            overflow-y-auto scroll-smooth
+            ${messages.length > 0 ? "overflow-y-auto scroll-smooth" : "overflow-hidden"}
             p-3 sm:p-6`}
           style={{
-            WebkitOverflowScrolling: "touch", // enables iOS-style momentum scroll
-            overscrollBehavior: "contain",    // prevents body scroll bounce
+            WebkitOverflowScrolling: messages.length > 0 ? "touch" : "auto",
+            overscrollBehavior: messages.length > 0 ? "contain" : "auto",
           }}
         >
+
 
           {messages.length === 0 && !loading && (
             <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4">
