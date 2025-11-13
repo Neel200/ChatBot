@@ -155,10 +155,15 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-2 sm:px-4 py-4 sm:py-6">
         <div
           ref={chatRef}
-          className={`w-full max-w-3xl flex-1 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 
-            ${messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"} 
+          className={`w-full max-w-3xl flex-1 min-h-0 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20
+            overflow-y-auto scroll-smooth
             p-3 sm:p-6`}
+          style={{
+            WebkitOverflowScrolling: "touch", // enables iOS-style momentum scroll
+            overscrollBehavior: "contain",    // prevents body scroll bounce
+          }}
         >
+
           {messages.length === 0 && !loading && (
             <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4">
               <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">

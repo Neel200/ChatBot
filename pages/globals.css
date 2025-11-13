@@ -50,3 +50,11 @@ body {
   margin: 0 !important;
   vertical-align: middle;
 }
+
+/* globals.css */
+@layer utilities {
+  .scroll-touch {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
