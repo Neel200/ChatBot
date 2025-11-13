@@ -1,81 +1,64 @@
 "use client";
+
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import type { SyntaxHighlighterProps } from "react-syntax-highlighter";
 
 type Role = "user" | "bot";
-interface Message {
-  role: Role;
-  text: string;
-}
+interface Message { role: Role; text: string; }
+interface ApiResponse { reply?: string; }
 
 export default function ChatPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [typingText, setTypingText] = useState("");
+
   const chatRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const chat = chatRef.current;
-     if (!chat) return;
+    if (!chat) return;
     const isNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 150;
     if (isNearBottom) {
-      requestAnimationFrame(() => {
-        chat.scrollTop = chat.scrollHeight;
-      });
+      requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
     }
   }, [messages, typingText]);
 
-
-  
   const typeEffect = (text: string) => {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-
-    let currentText = "";
-    let i = 0;
+    let currentText = ""; let i = 0;
     controllerRef.current = controllerRef.current ?? new AbortController();
-    setTypingText(""); // reset before start
+    setTypingText("");
 
     typingIntervalRef.current = setInterval(() => {
-      if (controllerRef.current === null) { // stopped manually
+      if (!controllerRef.current) {
         clearInterval(typingIntervalRef.current!);
-        setMessages(prev => [...prev, { role: "bot", text: currentText }]);
-        setTypingText("");
-        setLoading(false);
-        return;
+        setMessages((prev) => [...prev, { role: "bot", text: currentText }]);
+        setTypingText(""); setLoading(false); return;
       }
-
       if (i < text.length) {
-        currentText += text[i];
-        setTypingText(currentText); // use local buffer instead of async state append
-        i++;
-      } 
-      else {
+        currentText += text[i]; setTypingText(currentText); i++;
+      } else {
         clearInterval(typingIntervalRef.current!);
-        setMessages(prev => [...prev, { role: "bot", text }]);
-        setTypingText("");
-        setLoading(false);
-        controllerRef.current = null;
+        setMessages((prev) => [...prev, { role: "bot", text }]);
+        setTypingText(""); setLoading(false); controllerRef.current = null;
       }
     }, 25);
   };
 
-
-  /** Send a user message to backend */
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
-
     const userMessage: Message = { role: "user", text: input };
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-
-    const controller = new AbortController();
-    controllerRef.current = controller;
+    setInput(""); setLoading(true);
+    const controller = new AbortController(); controllerRef.current = controller;
 
     try {
       const res = await fetch("/api/chat", {
@@ -84,14 +67,11 @@ export default function ChatPage() {
         body: JSON.stringify({ message: userMessage.text }),
         signal: controller.signal,
       });
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data: { reply?: string } = await res.json();
+      const data: ApiResponse = await res.json();
       typeEffect(data.reply ?? "No response from the model.");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        // Keep partial text if stopped during fetch (no full reply yet)
         if (typingText) {
           setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
           setTypingText("");
@@ -100,95 +80,120 @@ export default function ChatPage() {
         }
       } else {
         console.error("Error:", err);
-        setMessages((prev) => [
-          ...prev,
-          { role: "bot", text: "⚠️ Something went wrong. Please try again." },
-        ]);
+        setMessages((prev) => [...prev, { role: "bot", text: "⚠️ Something went wrong. Please try again." }]);
       }
-      setLoading(false);
-      controllerRef.current = null;
+      setLoading(false); controllerRef.current = null;
     }
   };
 
-  /** Stop both API call and typing animation */
   const stopGenerating = () => {
-    controllerRef.current?.abort();
-    controllerRef.current = null;
-
-    if (typingIntervalRef.current) {
-      clearInterval(typingIntervalRef.current);
-    }
-
-    // Preserve whatever text was typed so far
-    if (typingText) {
-      setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
-      setTypingText("");
-    }
-
-    setLoading(false);
+    controllerRef.current?.abort(); controllerRef.current = null;
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    if (typingText) setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
+    setTypingText(""); setLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && input.trim()) sendMessage();
   };
 
+  const MarkdownRenderer = ({ text }: { text: string }) => {
+    const [copied, setCopied] = useState(false);
+    const handleCopy = (code: string) => {
+      navigator.clipboard.writeText(code);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    };
+
+    const components: Components = {
+      code({
+        inline, className, children, ...props
+      }: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & { inline?: boolean }) {
+        const match = /language-(\w+)/.exec(className ?? "");
+        if (!inline && match) {
+          const codeString = String(children).replace(/\n$/, "");
+          return (
+            <div className="relative group my-2">
+              <button
+                onClick={() => handleCopy(codeString)}
+                className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+              <SyntaxHighlighter
+                style={oneDark}
+                language={match[1]}
+                PreTag="div"
+                customStyle={{
+                  borderRadius: "0.75rem",
+                  padding: "1rem",
+                  background: "rgba(0,0,0,0.9)",
+                  fontSize: "0.85rem",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                }}
+                {...(props as SyntaxHighlighterProps)}
+              >
+                {codeString}
+              </SyntaxHighlighter>
+            </div>
+          );
+        }
+        return (
+          <code className="bg-gray-200 text-pink-600 px-1 py-0.5 rounded font-mono text-sm" {...props}>
+            {children}
+          </code>
+        );
+      },
+    };
+
+    return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{text}</ReactMarkdown>;
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-500 pb-6">
-      {/* Chat container */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-4 py-6">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-500 pb-4 sm:pb-6">
+      {/* Chat Container */}
+      <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-2 sm:px-4 py-4 sm:py-6">
         <div
           ref={chatRef}
-          className={`w-full max-w-3xl flex-1 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg ${
-          messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"
-          } p-6 border border-white/20`}
+          className={`w-full max-w-3xl flex-1 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 
+            ${messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"} 
+            p-3 sm:p-6`}
         >
           {messages.length === 0 && !loading && (
-            <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-4">
-              <h1 className="text-3xl font-semibold text-white drop-shadow-lg">
+            <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4">
+              <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">
                 Start chatting with Gemini 🤖
               </h1>
-              <p className="text-gray-200">Type a message below to begin.</p>
+              <p className="text-gray-200 text-sm sm:text-base">Type a message below to begin.</p>
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-xl p-3 rounded-2xl shadow-sm ${
-                  m.role === "user"
-                  ? "bg-indigo-500 text-white rounded-br-none"
-                  : "bg-white/90 text-gray-900 rounded-bl-none"
+                  className={`max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl shadow-sm break-words ${
+                    m.role === "user"
+                      ? "bg-indigo-500 text-white rounded-br-none"
+                      : "bg-white/90 text-gray-900 rounded-bl-none"
                   }`}
                 >
-                  <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                    >
-                      {m.text}
-                    </ReactMarkdown>
-
+                  <div className="prose prose-sm sm:prose-base max-w-none">
+                    <MarkdownRenderer text={m.text} />
                   </div>
                 </div>
               </div>
             ))}
 
-
             {typingText && (
               <div className="flex justify-start">
-                <div className="max-w-xl p-3 rounded-2xl bg-white/90 text-gray-900 rounded-bl-none shadow-sm">
-                  <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                    >
-                      {typingText + "▋"}
-                    </ReactMarkdown>
-
+                <div className="max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl bg-white/90 text-gray-900 rounded-bl-none shadow-sm">
+                  <div className="prose prose-sm sm:prose-base max-w-none">
+                    <MarkdownRenderer text={`${typingText}▋`} />
                   </div>
                 </div>
               </div>
             )}
-
 
             {loading && !typingText && (
               <div className="flex justify-start">
@@ -204,22 +209,22 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Input area */}
-        <div className="w-full max-w-3xl bg-white/20 backdrop-blur-md border border-white/30 mt-4 rounded-xl shadow-lg p-3">
-          <div className="flex space-x-2 items-center">
+        {/* Input Area */}
+        <div className="w-full max-w-3xl bg-white/20 backdrop-blur-md border border-white/30 mt-3 sm:mt-4 rounded-xl shadow-lg p-2 sm:p-3">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 items-stretch sm:items-center">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="border border-gray-300/50 rounded-lg p-3 flex-grow focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white/80"
+              className="border border-gray-300/50 rounded-lg p-3 flex-grow focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white/80 text-sm sm:text-base"
               placeholder="Type your message..."
             />
             {!loading ? (
               <button
                 onClick={sendMessage}
                 disabled={!input.trim()}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
+                className={`w-full sm:w-auto px-4 py-2 rounded-lg font-medium transition text-sm sm:text-base ${
                   input.trim()
                     ? "bg-indigo-600 text-white hover:bg-indigo-700"
                     : "bg-gray-400 text-gray-200 cursor-not-allowed"
@@ -230,7 +235,7 @@ export default function ChatPage() {
             ) : (
               <button
                 onClick={stopGenerating}
-                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-medium"
+                className="w-full sm:w-auto bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-medium text-sm sm:text-base"
               >
                 Stop
               </button>
