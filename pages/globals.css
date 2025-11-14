@@ -58,3 +58,32 @@ body {
     overscroll-behavior: contain;
   }
 }
+/* force code blocks not to wrap and allow horizontal scroll */
+.prose pre,
+.prose code,
+.prose pre code {
+  white-space: pre !important;
+  overflow-x: auto !important;
+  display: block;
+}
+
+/* optional: keep pre readable on small screens */
+.prose pre {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* remove unwanted grey bg behind SyntaxHighlighter */
+.prose pre {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* inline code unaffected */
+.prose pre code {
+  background: transparent !important;
+}
+
+

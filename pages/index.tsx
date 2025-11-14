@@ -129,7 +129,7 @@ export default function ChatPage() {
                   background: "rgba(0,0,0,0.9)",
                   fontSize: "0.85rem",
                   overflowX: "auto",
-                  whiteSpace: "pre-wrap",
+                  whiteSpace: "pre",
                 }}
                 {...(props as SyntaxHighlighterProps)}
               >
@@ -202,11 +202,20 @@ export default function ChatPage() {
               <div className="flex justify-start">
                 <div className="max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl bg-white/90 text-gray-900 rounded-bl-none shadow-sm">
                   <div className="prose prose-sm sm:prose-base max-w-none">
-                    <MarkdownRenderer text={`${typingText}▋`} />
+                    {/* If typingText likely contains code or multiple lines, render a raw <pre><code> so scrolling works */}
+                    {typingText.includes("\n") ? (
+                      <pre className="whitespace-pre overflow-x-auto rounded-lg p-4 bg-black/80 text-white font-mono text-sm">
+                        <code>{typingText + "▋"}</code>
+                      </pre>
+                    ) : (
+                      // for single-line typing, keep MarkdownRenderer so normal inline formatting still works
+                      <MarkdownRenderer text={`${typingText}▋`} />
+                    )}
                   </div>
                 </div>
               </div>
             )}
+
 
             {loading && !typingText && (
               <div className="flex justify-start">
