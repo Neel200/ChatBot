@@ -191,7 +191,7 @@ export default function ChatPage() {
 
         return (
           <code
-            className="bg-gray-200 text-pink-600 px-1 py-0.5 rounded font-mono text-sm"
+            className="text-pink-600 px-1 py-0.5 rounded font-mono text-sm"
             {...props}
           >
             {children}

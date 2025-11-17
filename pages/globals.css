@@ -58,16 +58,44 @@ body {
     overscroll-behavior: contain;
   }
 }
-/* force code blocks not to wrap and allow horizontal scroll */
+/* force code blocks not to wrap and allow horizontal scroll 
 .prose pre,
 .prose code,
 .prose pre code {
   white-space: pre !important;
   overflow-x: auto !important;
   display: block;
+}*/
+
+/* force code blocks not to wrap and allow horizontal scroll */
+.prose pre,
+.prose pre code {
+  white-space: pre !important;
+  overflow-x: auto !important;
+  display: block;
 }
+
+/* allow inline code to stay inline */
+.prose code {
+  white-space: pre-wrap !important;
+  overflow-x: visible !important;
+  display: inline !important;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.25rem;
+}
+
 
 /* optional: keep pre readable on small screens */
 .prose pre {
   -webkit-overflow-scrolling: touch;
+}
+
+/* inline code must stay inline and clean */
+.prose code {
+  background: transparent !important;
+  display: inline !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  white-space: pre-wrap !important;
 }

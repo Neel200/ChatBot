@@ -28,7 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           "api-key": apiKey
         },
         body: JSON.stringify({
-          model: "gpt-4.1-vishon-demo-shopline",
           messages: [
             { role: "user", content: message }
           ]
@@ -38,17 +37,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const data = await response.json();
 
-    let reply = data?.choices?.[0]?.message?.content || "No response";
-
-    // -------------------------
-    // FIX FOR RANDOM “n” LINES
-    // -------------------------
-    reply = reply
-      .replace(/\\n/g, "\n")  // convert "\n" (literal) → real newline
-      .replace(/\r/g, "");    // cleanup
+    const reply =
+      data?.choices?.[0]?.message?.content || "No response";
 
     res.status(200).json({ reply });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error calling Azure OpenAI API" });
