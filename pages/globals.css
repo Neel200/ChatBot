@@ -99,3 +99,10 @@ body {
   border-radius: 0 !important;
   white-space: pre-wrap !important;
 }
+
+/* restore paragraph spacing inside rendered markdown */
+.prose p {
+  margin-top: 0.75rem !important;   /* space above */
+  margin-bottom: 0.75rem !important; /* space below */
+  line-height: 1.6;
+}
