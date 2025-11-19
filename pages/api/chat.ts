@@ -1,9 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import formidable from "formidable";
 import fs from "fs";
-//import { lookup } from "mrmime"; // New package for MIME type checking
-
-// Install this package: npm install mrmime or yarn add mrmime
 
 // ⚠️ IMPORTANT: Disable Next.js body parser to handle multipart/form-data
 export const config = {
