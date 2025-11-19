@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,31 +9,56 @@ import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import type { SyntaxHighlighterProps } from "react-syntax-highlighter";
 
 type Role = "user" | "bot";
-interface Message { role: Role; text: string; }
-interface ApiResponse { reply?: string; }
+interface Message {
+  role: Role;
+  text: string;
+  file?: {
+    name: string;
+    url: string; // Base64 URL for display
+    mimeType: string;
+  };
+}
+interface ApiResponse {
+  reply?: string;
+}
 
 // -------------------------
 // CLEAN MARKDOWN FIX
 // -------------------------
 const cleanMarkdown = (text: string) => {
+  // Removes lines that contain only optional whitespace and 'n' or 'N'
   return text.replace(/^\s*[nN]\s*$/gm, "");
 };
 
+// Converts a File object to a Base64 data URL for local display
+function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ChatPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [typingText, setTypingText] = useState("");
+  // New state for file upload
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // New ref for hidden file input
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const chat = chatRef.current;
     if (!chat) return;
 
+    // Scroll to bottom if near the bottom
     const isNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 150;
 
     if (isNearBottom) {
@@ -43,7 +68,7 @@ export default function ChatPage() {
     }
   }, [messages, typingText]);
 
-  const typeEffect = (text: string) => {
+  const typeEffect = useCallback((text: string) => {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
 
     let currentText = "";
@@ -55,7 +80,7 @@ export default function ChatPage() {
     typingIntervalRef.current = setInterval(() => {
       if (!controllerRef.current) {
         clearInterval(typingIntervalRef.current!);
-        setMessages(prev => [...prev, { role: "bot", text: currentText }]);
+        setMessages((prev) => [...prev, { role: "bot", text: currentText }]);
         setTypingText("");
         setLoading(false);
         return;
@@ -68,21 +93,59 @@ export default function ChatPage() {
       } else {
         clearInterval(typingIntervalRef.current!);
 
-        setMessages(prev => [...prev, { role: "bot", text }]);
+        setMessages((prev) => [...prev, { role: "bot", text }]);
         setTypingText("");
         setLoading(false);
         controllerRef.current = null;
       }
     }, 25);
+  }, []);
+
+  // New handler for file input change
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Optional: Auto-focus the input box after file selection
+      (e.target.form?.elements.namedItem("message-input") as HTMLInputElement)?.focus();
+    }
+    // Reset file input value to allow selecting the same file again
+    e.target.value = "";
+  };
+
+  // New handler to remove selected file
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && !selectedFile) || loading) return;
 
     const userMessage: Message = { role: "user", text: input };
-    setMessages(prev => [...prev, userMessage]);
+
+    if (selectedFile) {
+      const dataURL = await fileToDataURL(selectedFile);
+      userMessage.file = {
+        name: selectedFile.name,
+        url: dataURL,
+        mimeType: selectedFile.type,
+      };
+    }
+
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Prepare FormData for multimodal request
+    const formData = new FormData();
+    if (input.trim()) {
+      formData.append("message", input);
+    }
+    if (selectedFile) {
+      // The backend expects the file under the key 'file'
+      formData.append("file", selectedFile);
+    }
 
     setInput("");
+    setSelectedFile(null);
     setLoading(true);
 
     const controller = new AbortController();
@@ -91,8 +154,8 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage.text }),
+        // Do not set Content-Type header; let the browser set it for FormData, including the boundary
+        body: formData,
         signal: controller.signal,
       });
 
@@ -103,14 +166,17 @@ export default function ChatPage() {
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         if (typingText) {
-          setMessages(prev => [...prev, { role: "bot", text: typingText }]);
+          setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
           setTypingText("");
         } else {
-          setMessages(prev => [...prev, { role: "bot", text: "⏹️ Generation stopped." }]);
+          setMessages((prev) => [...prev, { role: "bot", text: "⏹️ Generation stopped." }]);
         }
       } else {
         console.error("Error:", err);
-        setMessages(prev => [...prev, { role: "bot", text: "⚠️ Something went wrong. Please try again." }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "bot", text: "⚠️ Something went wrong. Please try again." },
+        ]);
       }
 
       setLoading(false);
@@ -125,7 +191,7 @@ export default function ChatPage() {
     if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
 
     if (typingText) {
-      setMessages(prev => [...prev, { role: "bot", text: typingText }]);
+      setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
     }
 
     setTypingText("");
@@ -133,7 +199,10 @@ export default function ChatPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && input.trim()) sendMessage();
+    if (e.key === "Enter" && (input.trim() || selectedFile)) {
+      e.preventDefault(); // Prevent default form submit action
+      sendMessage();
+    }
   };
 
   const MarkdownRenderer = ({ text }: { text: string }) => {
@@ -155,7 +224,6 @@ export default function ChatPage() {
         React.HTMLAttributes<HTMLElement>,
         HTMLElement
       > & { inline?: boolean }) {
-
         const match = /language-(\w+)/.exec(className ?? "");
 
         if (!inline && match) {
@@ -164,7 +232,7 @@ export default function ChatPage() {
             <div className="relative group my-2">
               <button
                 onClick={() => handleCopy(codeString)}
-                className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
               >
                 {copied ? "Copied!" : "Copy"}
               </button>
@@ -209,6 +277,36 @@ export default function ChatPage() {
     );
   };
 
+  // Helper function to render file attachment in chat
+  const FileAttachmentPreview = ({ file }: { file: Message["file"] }) => {
+    if (!file) return null;
+
+    const isImage = file.mimeType.startsWith("image/");
+    const isPDF = file.mimeType === "application/pdf";
+    const isText = file.mimeType.startsWith("text/") || isPDF;
+
+    const content = isImage ? (
+      // Image preview
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={file.url}
+        alt={file.name}
+        className="max-h-48 rounded-lg object-contain mt-2"
+      />
+    ) : (
+      // Placeholder for other file types (PDF, Text, Code)
+      <div className="mt-2 p-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-700 font-mono overflow-auto max-h-32">
+        **File:** {file.name}
+        <br />
+        <span className="text-xs text-gray-500">
+          ({isPDF ? "PDF Document" : isText ? "Text/Code File" : file.mimeType})
+        </span>
+      </div>
+    );
+
+    return content;
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-500 pb-4 sm:pb-6">
       {/* Chat Container */}
@@ -216,21 +314,20 @@ export default function ChatPage() {
         <div
           ref={chatRef}
           className={`w-full max-w-3xl flex-1 min-h-0 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20
-          ${messages.length > 0 ? "overflow-y-auto scroll-smooth" : "overflow-hidden"}
-            p-3 sm:p-6`}
+            ${messages.length > 0 ? "overflow-y-auto scroll-smooth" : "overflow-hidden"}
+             p-3 sm:p-6`}
           style={{
             WebkitOverflowScrolling: messages.length > 0 ? "touch" : "auto",
             overscrollBehavior: messages.length > 0 ? "contain" : "auto",
           }}
         >
-
           {messages.length === 0 && !loading && (
             <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4">
               <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">
                 Start chatting with Gemini 🤖
               </h1>
               <p className="text-gray-200 text-sm sm:text-base">
-                Type a message below to begin.
+                Type a message or attach a file below to begin.
               </p>
             </div>
           )}
@@ -248,6 +345,11 @@ export default function ChatPage() {
                       : "bg-white/90 text-gray-900 rounded-bl-none"
                   }`}
                 >
+                  {m.file && (
+                    <div className="mb-2">
+                      <FileAttachmentPreview file={m.file} />
+                    </div>
+                  )}
                   <div className="prose prose-sm sm:prose-base max-w-none">
                     <MarkdownRenderer text={m.text} />
                   </div>
@@ -255,11 +357,11 @@ export default function ChatPage() {
               </div>
             ))}
 
+            {/* Typing Indicator / Response in progress */}
             {typingText && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl bg-white/90 text-gray-900 rounded-bl-none shadow-sm">
                   <div className="prose prose-sm sm:prose-base max-w-none">
-
                     {typingText.trim().startsWith("```") ? (
                       <pre className="whitespace-pre overflow-x-auto rounded-lg p-4 bg-black/80 text-white font-mono text-sm">
                         <code>{typingText + "▋"}</code>
@@ -267,12 +369,12 @@ export default function ChatPage() {
                     ) : (
                       <MarkdownRenderer text={cleanMarkdown(`${typingText}▋`)} />
                     )}
-
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Loading dots */}
             {loading && !typingText && (
               <div className="flex justify-start">
                 <div className="bg-white/90 text-gray-900 px-3 py-2 rounded-2xl shadow-sm">
@@ -284,34 +386,103 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
-
           </div>
         </div>
 
         {/* Input Area */}
         <div className="w-full max-w-3xl mt-3 sm:mt-4 px-2">
-          <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md px-3 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
+          {/* File Preview Chip */}
+          {selectedFile && (
+            <div className="mb-2 flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-xl shadow-md p-2 max-w-full overflow-hidden">
+              <span className="text-sm font-medium text-gray-700 truncate mr-2">
+                Attached: {selectedFile.name}
+              </span>
+              <button
+                onClick={removeSelectedFile}
+                className="flex-shrink-0 w-5 h-5 ml-auto text-gray-500 hover:text-red-500 transition"
+                aria-label="Remove attached file"
+              >
+                <svg
+                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md pl-3 pr-12 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
+            {/* Hidden File Input - UPDATED ACCEPT ATTRIBUTE */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+              // The updated accept list includes application/pdf and text/*
+              accept="image/*, application/pdf, text/*, .txt, .js, .ts, .jsx, .tsx, .css, .html, .py, .java, .c, .cpp, .json, .md, .csv, .doc, .docx" 
+            />
+
+            {/* Plus Button for File Upload */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition mr-2 ${
+                loading
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600"
+              }`}
+              disabled={loading}
+              aria-label="Attach file"
+            >
+              <svg
+                xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
+              </svg>
+            </button>
+
+            {/* Main Input Field */}
             <input
               type="text"
+              name="message-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-sm sm:text-base pr-12"
-              placeholder="Type your message..."
+              className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-sm sm:text-base mr-2"
+              placeholder={selectedFile ? `Add a message about ${selectedFile.name}...` : "Type your message..."}
+              disabled={loading}
             />
 
+            {/* Send / Stop Button */}
             {!loading ? (
               <button
                 onClick={sendMessage}
-                disabled={!input.trim()}
+                disabled={!input.trim() && !selectedFile}
                 className={`absolute right-3 flex items-center justify-center w-8 h-8 rounded-full transition ${
-                  input.trim()
+                  input.trim() || selectedFile
                     ? "bg-indigo-600 hover:bg-indigo-700 text-white"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
+                aria-label="Send message"
               >
                 <svg
-                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={2}
@@ -329,9 +500,10 @@ export default function ChatPage() {
               <button
                 onClick={stopGenerating}
                 className="absolute right-3 flex items-center justify-center w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white transition"
+                aria-label="Stop generation"
               >
                 <svg
-                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
                   fill="currentColor"
                   viewBox="0 0 24 24"
                   className="w-3.5 h-3.5"
@@ -342,7 +514,6 @@ export default function ChatPage() {
             )}
           </div>
         </div>
-
       </div>
     </div>
   );
