@@ -1,58 +1,27 @@
+// pages/index.tsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import ReactMarkdown from "react-markdown";
-import type { Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import type { SyntaxHighlighterProps } from "react-syntax-highlighter";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import type { NextPage } from "next";
+//import MarkdownRenderer from "../components/chat/MarkdownRenderer";
+import ChatMessageBubble from "../components/chat/ChatMessageBubble";
+import TypingBubble from "../components/chat/TypingBubble";
+import LoadingDots from "../components/chat/LoadingDots";
+import ChatInput from "../components/chat/ChatInput";
+import { fileToDataURL } from "../utils/chatUtils";
+import type { Message, ApiResponse } from "../components/types/chatTypes";
 
-type Role = "user" | "bot";
-interface Message {
-  role: Role;
-  text: string;
-  file?: {
-    name: string;
-    url: string; // Base64 URL for display
-    mimeType: string;
-  };
-}
-interface ApiResponse {
-  reply?: string;
-}
-
-// -------------------------
-// CLEAN MARKDOWN FIX
-// -------------------------
-const cleanMarkdown = (text: string) => {
-  // Removes lines that contain only optional whitespace and 'n' or 'N'
-  return text.replace(/^\s*[nN]\s*$/gm, "");
-};
-
-// Converts a File object to a Base64 data URL for local display
-function fileToDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
-  });
-}
-
-export default function ChatPage() {
+const ChatPage: NextPage = () => {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [typingText, setTypingText] = useState("");
-  // New state for file upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const chatRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  // New ref for hidden file input
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const chat = chatRef.current;
@@ -63,7 +32,7 @@ export default function ChatPage() {
 
     if (isNearBottom) {
       requestAnimationFrame(() => {
-        chat.scrollTop = chat.scrollHeight;
+        if (chat) chat.scrollTop = chat.scrollHeight;
       });
     }
   }, [messages, typingText]);
@@ -101,19 +70,15 @@ export default function ChatPage() {
     }, 25);
   }, []);
 
-  // New handler for file input change
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      // Optional: Auto-focus the input box after file selection
-      (e.target.form?.elements.namedItem("message-input") as HTMLInputElement)?.focus();
+      (e.target.form?.elements.namedItem("message-input") as HTMLInputElement | null)?.focus();
     }
-    // Reset file input value to allow selecting the same file again
     e.target.value = "";
   };
 
-  // New handler to remove selected file
   const removeSelectedFile = () => {
     setSelectedFile(null);
   };
@@ -134,13 +99,11 @@ export default function ChatPage() {
 
     setMessages((prev) => [...prev, userMessage]);
 
-    // Prepare FormData for multimodal request
     const formData = new FormData();
     if (input.trim()) {
       formData.append("message", input);
     }
     if (selectedFile) {
-      // The backend expects the file under the key 'file'
       formData.append("file", selectedFile);
     }
 
@@ -154,7 +117,6 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        // Do not set Content-Type header; let the browser set it for FormData, including the boundary
         body: formData,
         signal: controller.signal,
       });
@@ -198,118 +160,8 @@ export default function ChatPage() {
     setLoading(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && (input.trim() || selectedFile)) {
-      e.preventDefault(); // Prevent default form submit action
-      sendMessage();
-    }
-  };
-
-  const MarkdownRenderer = ({ text }: { text: string }) => {
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = (code: string) => {
-      navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    };
-
-    const components: Components = {
-      code({
-        inline,
-        className,
-        children,
-        ...props
-      }: React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      > & { inline?: boolean }) {
-        const match = /language-(\w+)/.exec(className ?? "");
-
-        if (!inline && match) {
-          const codeString = String(children).replace(/\n$/, "");
-          return (
-            <div className="relative group my-2">
-              <button
-                onClick={() => handleCopy(codeString)}
-                className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-
-              <SyntaxHighlighter
-                style={oneDark}
-                language={match[1]}
-                PreTag="div"
-                customStyle={{
-                  borderRadius: "0.75rem",
-                  padding: "1rem",
-                  background: "rgba(0,0,0,0.9)",
-                  fontSize: "0.85rem",
-                  overflowX: "auto",
-                  whiteSpace: "pre",
-                }}
-                {...(props as SyntaxHighlighterProps)}
-              >
-                {codeString}
-              </SyntaxHighlighter>
-            </div>
-          );
-        }
-
-        return (
-          <code
-            className="text-pink-600 px-1 py-0.5 rounded font-mono text-sm"
-            {...props}
-          >
-            {children}
-          </code>
-        );
-      },
-    };
-
-    return (
-      <div className="overflow-x-auto max-w-full">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-          {cleanMarkdown(text)}
-        </ReactMarkdown>
-      </div>
-    );
-  };
-
-  // Helper function to render file attachment in chat
-  const FileAttachmentPreview = ({ file }: { file: Message["file"] }) => {
-    if (!file) return null;
-
-    const isImage = file.mimeType.startsWith("image/");
-    const isPDF = file.mimeType === "application/pdf";
-    const isText = file.mimeType.startsWith("text/") || isPDF;
-
-    const content = isImage ? (
-      // Image preview
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={file.url}
-        alt={file.name}
-        className="max-h-48 rounded-lg object-contain mt-2"
-      />
-    ) : (
-      // Placeholder for other file types (PDF, Text, Code)
-      <div className="mt-2 p-2 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-700 font-mono overflow-auto max-h-32">
-        **File:** {file.name}
-        <br />
-        <span className="text-xs text-gray-500">
-          ({isPDF ? "PDF Document" : isText ? "Text/Code File" : file.mimeType})
-        </span>
-      </div>
-    );
-
-    return content;
-  };
-
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-500 pb-4 sm:pb-6">
-      {/* Chat Container */}
       <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-2 sm:px-4 py-4 sm:py-6">
         <div
           ref={chatRef}
@@ -334,189 +186,30 @@ export default function ChatPage() {
 
           <div className="space-y-3 sm:space-y-4">
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl shadow-sm break-words ${
-                    m.role === "user"
-                      ? "bg-indigo-500 text-white rounded-br-none"
-                      : "bg-white/90 text-gray-900 rounded-bl-none"
-                  }`}
-                >
-                  {m.file && (
-                    <div className="mb-2">
-                      <FileAttachmentPreview file={m.file} />
-                    </div>
-                  )}
-                  <div className="prose prose-sm sm:prose-base max-w-none">
-                    <MarkdownRenderer text={m.text} />
-                  </div>
-                </div>
-              </div>
+              <ChatMessageBubble key={i} message={m} index={i} />
             ))}
 
-            {/* Typing Indicator / Response in progress */}
-            {typingText && (
-              <div className="flex justify-start">
-                <div className="max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl bg-white/90 text-gray-900 rounded-bl-none shadow-sm">
-                  <div className="prose prose-sm sm:prose-base max-w-none">
-                    {typingText.trim().startsWith("```") ? (
-                      <div className="overflow-x-auto w-full">
-                        <pre className="whitespace-pre min-w-max rounded-lg p-4 bg-black/80 text-white font-mono text-sm">
-                          <code>{typingText + "▋"}</code>
-                        </pre>
-                      </div>
-                    ) : (
-                      <MarkdownRenderer text={cleanMarkdown(`${typingText}▋`)} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            {typingText && <TypingBubble typingText={typingText} />}
 
-            {/* Loading dots */}
-            {loading && !typingText && (
-              <div className="flex justify-start">
-                <div className="bg-white/90 text-gray-900 px-3 py-2 rounded-2xl shadow-sm">
-                  <div className="flex space-x-1">
-                    <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></span>
-                    <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.2s]"></span>
-                    <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.4s]"></span>
-                  </div>
-                </div>
-              </div>
-            )}
+            {loading && !typingText && <LoadingDots />}
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="w-full max-w-3xl mt-3 sm:mt-4 px-2">
-          {/* File Preview Chip */}
-          {selectedFile && (
-            <div className="mb-2 flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-xl shadow-md p-2 max-w-full overflow-hidden">
-              <span className="text-sm font-medium text-gray-700 truncate mr-2">
-                Attached: {selectedFile.name}
-              </span>
-              <button
-                onClick={removeSelectedFile}
-                className="flex-shrink-0 w-5 h-5 ml-auto text-gray-500 hover:text-red-500 transition"
-                aria-label="Remove attached file"
-              >
-                <svg
-                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-          )}
-
-          <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md pl-3 pr-12 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
-            {/* Hidden File Input - UPDATED ACCEPT ATTRIBUTE */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              // The updated accept list includes application/pdf and text/*
-              accept="image/*, application/pdf, text/*, .txt, .js, .ts, .jsx, .tsx, .css, .html, .py, .java, .c, .cpp, .json, .md, .csv, .doc, .docx" 
-            />
-
-            {/* Plus Button for File Upload */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition mr-2 ${
-                loading
-                  ? "bg-gray-400 text-white cursor-not-allowed"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-600"
-              }`}
-              disabled={loading}
-              aria-label="Attach file"
-            >
-              <svg
-                xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
-              </svg>
-            </button>
-
-            {/* Main Input Field */}
-            <input
-              type="text"
-              name="message-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-sm sm:text-base mr-2"
-              placeholder={selectedFile ? `Add a message about ${selectedFile.name}...` : "Type your message..."}
-              disabled={loading}
-            />
-
-            {/* Send / Stop Button */}
-            {!loading ? (
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim() && !selectedFile}
-                className={`absolute right-3 flex items-center justify-center w-8 h-8 rounded-full transition ${
-                  input.trim() || selectedFile
-                    ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-                aria-label="Send message"
-              >
-                <svg
-                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 12l14-7-4 7 4 7-14-7z"
-                  />
-                </svg>
-              </button>
-            ) : (
-              <button
-                onClick={stopGenerating}
-                className="absolute right-3 flex items-center justify-center w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white transition"
-                aria-label="Stop generation"
-              >
-                <svg
-                  xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                  className="w-3.5 h-3.5"
-                >
-                  <rect x="6" y="6" width="12" height="12" rx="1" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          sendMessage={sendMessage}
+          loading={loading}
+          stopGenerating={stopGenerating}
+          selectedFile={selectedFile}
+          setSelectedFile={setSelectedFile}
+          fileInputRef={fileInputRef}
+          handleFileChange={handleFileChange}
+          removeSelectedFile={removeSelectedFile}
+        />
       </div>
     </div>
   );
-}
+};
+
+export default ChatPage;
