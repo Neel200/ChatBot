@@ -174,15 +174,20 @@ const ChatPage: NextPage = () => {
           }}
         >
           {messages.length === 0 && !loading && (
-            <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4">
+            <div
+              className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4 
+              opacity-0 translate-y-4 animate-[fadeSlideUp_1s_ease-out_forwards]"
+            >
               <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">
                 Start chatting with Gemini 🤖
               </h1>
-              <p className="text-gray-200 text-sm sm:text-base">
+
+              <p className="text-gray-200 text-sm sm:text-base opacity-0 animate-[fadeIn_1.2s_ease-out_0.3s_forwards]">
                 Type a message or attach a file below to begin.
               </p>
             </div>
           )}
+
 
           <div className="space-y-3 sm:space-y-4">
             {messages.map((m, i) => (
