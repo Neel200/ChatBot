@@ -1,7 +1,7 @@
 // components/chat/ChatInput.tsx
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 interface Props {
@@ -15,6 +15,9 @@ interface Props {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   removeSelectedFile: () => void;
+
+  isRecording: boolean;
+  setIsRecording: Dispatch<SetStateAction<boolean>>;
 }
 
 export default function ChatInput({
@@ -27,7 +30,56 @@ export default function ChatInput({
   fileInputRef,
   handleFileChange,
   removeSelectedFile,
+
+  isRecording,
+  setIsRecording,
 }: Props) {
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const startVoice = (): void => {
+    const SpeechRecognitionClass =
+      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition })
+        .webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      alert("Your browser does not support Speech Recognition.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionClass();
+    recognitionRef.current = recognition;
+
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => setIsRecording(true);
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let text = "";
+      for (let i = 0; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      setInput(text);
+    };
+
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
+
+    recognition.start();
+  };
+
+  const stopVoice = (): void => {
+    recognitionRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  const handleMicClick = (): void => {
+    if (isRecording) stopVoice();
+    else startVoice();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && (input.trim() || selectedFile)) {
       e.preventDefault();
@@ -47,20 +99,16 @@ export default function ChatInput({
             className="flex-shrink-0 w-5 h-5 ml-auto text-gray-500 hover:text-red-500 transition"
             aria-label="Remove attached file"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
       )}
 
-      <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md pl-3 pr-12 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
+      <div className="relative flex items-center bg-white/80 backdrop-blur-md border border-gray-300 rounded-2xl shadow-md pl-3 pr-14 py-2 sm:py-3 focus-within:ring-2 focus-within:ring-indigo-400 transition">
+
         <input
           type="file"
           ref={fileInputRef}
@@ -72,13 +120,18 @@ export default function ChatInput({
         <button
           onClick={() => fileInputRef.current?.click()}
           className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full transition mr-2 ${
-            loading ? "bg-gray-400 text-white cursor-not-allowed" : "bg-gray-200 hover:bg-gray-300 text-gray-600"
+            loading
+              ? "bg-gray-400 text-white cursor-not-allowed"
+              : "bg-gray-200 hover:bg-gray-300 text-gray-600"
           }`}
           disabled={loading}
           aria-label="Attach file"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+            viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+            className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </button>
 
@@ -89,21 +142,58 @@ export default function ChatInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-sm sm:text-base mr-2"
-          placeholder={selectedFile ? `Add a message about ${selectedFile.name}...` : "Type your message..."}
+          placeholder={
+            selectedFile
+              ? `Add a message about ${selectedFile.name}...`
+              : "Type your message..."
+          }
           disabled={loading}
         />
+
+        <button
+          onClick={handleMicClick}
+          className={`absolute right-12 flex items-center justify-center w-8 h-8 rounded-full transition ${
+            isRecording
+              ? "bg-red-500 text-white"
+              : "bg-gray-200 hover:bg-gray-300 text-gray-600"
+          }`}
+          aria-label="Record voice"
+        >
+          {isRecording ? (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor"
+              viewBox="0 0 24 24" className="w-4 h-4">
+              <circle cx="12" cy="12" r="6" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+              viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+              className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M12 18a4 4 0 004-4V7a4 4 0 10-8 0v7a4 4 0 004 4z" />
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M19 11a7 7 0 01-14 0" />
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M12 18v3m-4 0h8" />
+            </svg>
+          )}
+        </button>
 
         {!loading ? (
           <button
             onClick={() => void sendMessage()}
             disabled={!input.trim() && !selectedFile}
             className={`absolute right-3 flex items-center justify-center w-8 h-8 rounded-full transition ${
-              input.trim() || selectedFile ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              input.trim() || selectedFile
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
             aria-label="Send message"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12l14-7-4 7 4 7-14-7z" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+              viewBox="0 0 24 24" strokeWidth={2}
+              stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M5 12l14-7-4 7 4 7-14-7z" />
             </svg>
           </button>
         ) : (
@@ -112,7 +202,8 @@ export default function ChatInput({
             className="absolute right-3 flex items-center justify-center w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white transition"
             aria-label="Stop generation"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-3.5 h-3.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor"
+              viewBox="0 0 24 24" className="w-3.5 h-3.5">
               <rect x="6" y="6" width="12" height="12" rx="1" />
             </svg>
           </button>

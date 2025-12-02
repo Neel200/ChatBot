@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { NextPage } from "next";
-//import MarkdownRenderer from "../components/chat/MarkdownRenderer";
 import ChatMessageBubble from "../components/chat/ChatMessageBubble";
 import TypingBubble from "../components/chat/TypingBubble";
 import LoadingDots from "../components/chat/LoadingDots";
@@ -17,6 +16,7 @@ const ChatPage: NextPage = () => {
   const [loading, setLoading] = useState(false);
   const [typingText, setTypingText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -27,8 +27,8 @@ const ChatPage: NextPage = () => {
     const chat = chatRef.current;
     if (!chat) return;
 
-    // Scroll to bottom if near the bottom
-    const isNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 150;
+    const isNearBottom =
+      chat.scrollHeight - chat.scrollTop - chat.clientHeight < 150;
 
     if (isNearBottom) {
       requestAnimationFrame(() => {
@@ -61,7 +61,6 @@ const ChatPage: NextPage = () => {
         i++;
       } else {
         clearInterval(typingIntervalRef.current!);
-
         setMessages((prev) => [...prev, { role: "bot", text }]);
         setTypingText("");
         setLoading(false);
@@ -70,20 +69,26 @@ const ChatPage: NextPage = () => {
     }, 25);
   }, []);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): Promise<void> => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      (e.target.form?.elements.namedItem("message-input") as HTMLInputElement | null)?.focus();
+      (
+        e.target.form?.elements.namedItem(
+          "message-input"
+        ) as HTMLInputElement | null
+      )?.focus();
     }
     e.target.value = "";
   };
 
-  const removeSelectedFile = () => {
+  const removeSelectedFile = (): void => {
     setSelectedFile(null);
   };
 
-  const sendMessage = async () => {
+  const sendMessage = async (): Promise<void> => {
     if ((!input.trim() && !selectedFile) || loading) return;
 
     const userMessage: Message = { role: "user", text: input };
@@ -131,7 +136,10 @@ const ChatPage: NextPage = () => {
           setMessages((prev) => [...prev, { role: "bot", text: typingText }]);
           setTypingText("");
         } else {
-          setMessages((prev) => [...prev, { role: "bot", text: "⏹️ Generation stopped." }]);
+          setMessages((prev) => [
+            ...prev,
+            { role: "bot", text: "⏹️ Generation stopped." },
+          ]);
         }
       } else {
         console.error("Error:", err);
@@ -146,7 +154,7 @@ const ChatPage: NextPage = () => {
     }
   };
 
-  const stopGenerating = () => {
+  const stopGenerating = (): void => {
     controllerRef.current?.abort();
     controllerRef.current = null;
 
@@ -174,10 +182,8 @@ const ChatPage: NextPage = () => {
           }}
         >
           {messages.length === 0 && !loading && (
-            <div
-              className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4 
-              opacity-0 translate-y-4 animate-[fadeSlideUp_1s_ease-out_forwards]"
-            >
+            <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-3 sm:space-y-4 
+              opacity-0 translate-y-4 animate-[fadeSlideUp_1s_ease-out_forwards]">
               <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">
                 Start chatting with Gemini 🤖
               </h1>
@@ -188,14 +194,12 @@ const ChatPage: NextPage = () => {
             </div>
           )}
 
-
           <div className="space-y-3 sm:space-y-4">
             {messages.map((m, i) => (
               <ChatMessageBubble key={i} message={m} index={i} />
             ))}
 
             {typingText && <TypingBubble typingText={typingText} />}
-
             {loading && !typingText && <LoadingDots />}
           </div>
         </div>
@@ -211,6 +215,8 @@ const ChatPage: NextPage = () => {
           fileInputRef={fileInputRef}
           handleFileChange={handleFileChange}
           removeSelectedFile={removeSelectedFile}
+          isRecording={isRecording}
+          setIsRecording={setIsRecording}
         />
       </div>
     </div>
