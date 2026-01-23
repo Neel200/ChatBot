@@ -16,7 +16,7 @@ export async function callOpenAIVision(
   };
 
   const response = await fetch(
-    "https://vision-demo-shopline.openai.azure.com/openai/deployments/gpt-4.1-vishon-demo-shopline/chat/completions?api-version=2025-01-01-preview",
+    "https://vision-demo-shopline.openai.azure.com/openai/deployments/gpt-4.1-vision-demo-shopline/chat/completions?api-version=2024-02-15-preview",
     {
       method: "POST",
       headers: {

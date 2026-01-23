@@ -30,10 +30,13 @@ export type ImageUrlContent = {
 
 export type MessageContent = TextContent | ImageUrlContent;
 
+export type OpenAIRole = "user" | "assistant";
+
 export interface ChatMessage {
-  role: "user";
+  role: OpenAIRole;
   content: MessageContent[];
 }
+
 
 export interface OpenAIChatCompletionRequest {
   messages: ChatMessage[];
