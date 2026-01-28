@@ -88,14 +88,15 @@ const ChatPage: NextPage = () => {
 
       if (!res.ok) return;
 
-      const data: StoredMessage[] = await res.json();
+      const data = await res.json();
 
       setMessages(
-        data.map((m) => ({
+        data.messages.map((m: StoredMessage) => ({
           role: m.role,
           text: m.text,
         }))
       );
+
 
       hasLoadedConversationRef.current = true;
     },
@@ -257,6 +258,10 @@ const ChatPage: NextPage = () => {
     controllerRef.current = controller;
 
     try {
+      if (activeConversationId) {
+        formData.append("conversationId", activeConversationId);
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },

@@ -49,7 +49,6 @@ export default function ConversationList({
   if (loading) {
     return <div className="p-4 text-sm text-gray-500">Loading…</div>;
   }
-
   return (
     <aside className="w-64 border-r border-gray-700 overflow-y-auto">
       <div className="p-4 text-xs uppercase text-gray-400">

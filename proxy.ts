@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 const PUBLIC_API_ROUTES = [
   "/api/auth/signup",
   "/api/auth/login",
+  "/api/chat"
 ];
 
 export function proxy(request: NextRequest): NextResponse {
@@ -16,7 +17,7 @@ export function proxy(request: NextRequest): NextResponse {
   }
 
   // Protect other API routes
-  if (pathname.startsWith("/api")) {
+  if (pathname.startsWith("/api") && !pathname.startsWith("/api/chat")){
     const token = request.cookies.get("token")?.value;
 
     if (!token) {

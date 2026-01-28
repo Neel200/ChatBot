@@ -12,6 +12,18 @@ export default async function handler(
 
   await dbConnect();
 
+  if (req.method === "POST") {
+    const conversation = await Conversation.create({
+      userId,
+      title: "New chat",
+      createdAt: new Date(),
+    });
+
+    res.status(201).json({ id: conversation._id });
+    return;
+  }
+
+
   if (req.method === "GET") {
     const conversations = await Conversation.find({ userId })
       .sort({ createdAt: -1 })
