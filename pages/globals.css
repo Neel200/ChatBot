@@ -63,12 +63,20 @@ button:disabled {
   vertical-align: middle;
 }
 
-/* globals.css */
 @layer utilities {
   .scroll-touch {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
+}
+
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-message-in {
+  animation: messageIn 0.22s ease-out both;
 }
 /* force code blocks not to wrap and allow horizontal scroll 
 .prose pre,
