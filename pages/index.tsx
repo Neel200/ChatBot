@@ -47,6 +47,7 @@ const ChatPage: NextPage = () => {
   const [token, setToken] = useState<string | null>(null);
   const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loadingConversation, setLoadingConversation] = useState(false);
 
   /* ================= REFS ================= */
 
@@ -83,6 +84,7 @@ const ChatPage: NextPage = () => {
     setMessages([]);
     setTypingText("");
     setLoading(false);
+    setLoadingConversation(false);
     setSelectedFile(null);
     hasLoadedConversationRef.current = false;
   };
@@ -91,26 +93,30 @@ const ChatPage: NextPage = () => {
     async (id: string) => {
       if (!token) return;
 
-      const res = await fetch(`/api/conversations/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      setLoadingConversation(true);
+      try {
+        const res = await fetch(`/api/conversations/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      if (!res.ok) return;
+        if (!res.ok) return;
 
-      const data = await res.json();
-      setConversationId(id);
+        const data = await res.json();
+        setConversationId(id);
 
-      setMessages(
-        data.messages.map((m: StoredMessage) => ({
-          _id: m._id,
-          role: m.role,
-          text: m.text,
-          file: m.file,
-        }))
-      );
+        setMessages(
+          data.messages.map((m: StoredMessage) => ({
+            _id: m._id,
+            role: m.role,
+            text: m.text,
+            file: m.file,
+          }))
+        );
 
-
-      hasLoadedConversationRef.current = true;
+        hasLoadedConversationRef.current = true;
+      } finally {
+        setLoadingConversation(false);
+      }
     },
     [token]
   );
@@ -354,6 +360,7 @@ const ChatPage: NextPage = () => {
             setMessages([]);
             setTypingText("");
             setLoading(false);
+            setLoadingConversation(true);
             hasLoadedConversationRef.current = false;
           }}
           onConversationRemoved={(removedConversationId) => {
@@ -445,7 +452,23 @@ const ChatPage: NextPage = () => {
                 : "h-[min(52dvh,520px)] flex-none sm:h-[min(56dvh,560px)]"
             }`}
           >
-            {messages.length === 0 && !loading && (
+            {loadingConversation && (
+              <div className="space-y-4 p-2 sm:p-4">
+                {[70, 45, 85, 55].map((w, i) => (
+                  <div key={i} className={`flex items-end gap-2 ${i % 2 === 0 ? "justify-start" : "justify-end"}`}>
+                    {i % 2 === 0 && (
+                      <div className="mb-1 h-7 w-7 flex-shrink-0 rounded-full bg-slate-200 animate-pulse" />
+                    )}
+                    <div
+                      className={`h-10 rounded-[22px] animate-pulse ${i % 2 === 0 ? "rounded-bl-md bg-slate-100" : "rounded-br-md bg-indigo-100"}`}
+                      style={{ width: `${w}%`, maxWidth: "32rem" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {messages.length === 0 && !loading && !loadingConversation && (
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-xl shadow-indigo-200">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8">
