@@ -388,7 +388,7 @@ const ChatPage: NextPage = () => {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-600">
-                  ChatKaBot
+                  ChatBot
                 </p>
                 <h1 className="truncate text-base font-semibold text-slate-950 sm:text-lg">
                   AI workspace

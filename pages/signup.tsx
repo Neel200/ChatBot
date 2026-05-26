@@ -58,7 +58,7 @@ export default function Signup() {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-600">
-              ChatKaBot
+              ChatBot
             </p>
             <h1 className="text-lg font-semibold text-slate-950">AI workspace</h1>
           </div>

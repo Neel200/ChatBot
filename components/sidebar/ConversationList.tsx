@@ -160,7 +160,7 @@ export default function ConversationList({
               <SparkleIcon />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">ChatKaBot</p>
+              <p className="truncate text-sm font-semibold text-white">ChatBot</p>
               <p className="text-xs text-slate-400">AI assistant</p>
             </div>
             <button
