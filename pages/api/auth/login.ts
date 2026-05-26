@@ -6,13 +6,8 @@ import jwt from "jsonwebtoken";
 import { dbConnect } from "@/lib/dbConnect";
 import { User } from "@/models/User";
 
-interface LoginResponse {
-  token: string;
-}
-
-interface ErrorResponse {
-  error: string;
-}
+interface LoginResponse { token: string }
+interface ErrorResponse { error: string; unverified?: boolean }
 
 export default async function handler(
   req: NextApiRequest,
@@ -32,29 +27,33 @@ export default async function handler(
     return;
   }
 
-  const user = await User.findOne({ email: email.toLowerCase() }); // ✅ normalize
+  const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Invalid email or password" });
     return;
   }
 
-  const isValid: boolean = await bcrypt.compare(password, user.password);
+  const isValid = await bcrypt.compare(password, user.password);
   if (!isValid) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Invalid email or password" });
     return;
   }
 
-  const secret: string | undefined = process.env.JWT_SECRET;
+  if (!user.isEmailVerified) {
+    res.status(403).json({
+      error: "Please verify your email before logging in. Check your inbox for the verification link.",
+      unverified: true,
+    });
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET;
   if (!secret) {
     res.status(500).json({ error: "JWT secret missing" });
     return;
   }
 
-  const token: string = jwt.sign(
-    { userId: user._id.toString() },
-    secret,
-    { expiresIn: "7d" }
-  );
+  const token = jwt.sign({ userId: user._id.toString() }, secret, { expiresIn: "7d" });
 
   res.status(200).json({ token });
 }
