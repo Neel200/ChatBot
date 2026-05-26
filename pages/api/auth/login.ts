@@ -40,11 +40,18 @@ export default async function handler(
   }
 
   if (!user.isEmailVerified) {
-    res.status(403).json({
-      error: "Please verify your email before logging in. Check your inbox for the verification link.",
-      unverified: true,
-    });
-    return;
+    // Old accounts (created before email verification was added) have
+    // isEmailVerified=false but no verification token — auto-verify them.
+    if (!user.emailVerificationToken) {
+      user.isEmailVerified = true;
+      await user.save();
+    } else {
+      res.status(403).json({
+        error: "Please verify your email before logging in. Check your inbox for the verification link.",
+        unverified: true,
+      });
+      return;
+    }
   }
 
   const secret = process.env.JWT_SECRET;
