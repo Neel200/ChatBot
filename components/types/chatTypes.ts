@@ -2,11 +2,12 @@ export type Role = "user" | "bot";
 
 export interface FileData {
   name: string;
-  url: string;
+  url?: string;
   mimeType: string;
 }
 
 export interface Message {
+  _id?: string;
   role: Role;
   text: string;
   file?: FileData;
@@ -14,6 +15,8 @@ export interface Message {
 
 export interface ApiResponse {
   reply?: string;
+  conversationId?: string;
+  messages?: Message[];
 }
 
 export type TextContent = {
@@ -30,7 +33,7 @@ export type ImageUrlContent = {
 
 export type MessageContent = TextContent | ImageUrlContent;
 
-export type OpenAIRole = "user" | "assistant";
+export type OpenAIRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
   role: OpenAIRole;
@@ -64,3 +67,9 @@ export interface OpenAIChatCompletionResponse {
 }
 
 export type FileContentPart = TextContent | ImageUrlContent;
+
+export interface JwtPayload {
+  userId: string;
+  iat: number;
+  exp: number;
+}

@@ -64,10 +64,10 @@ export default function VoiceRecorder({
   return (
     <button
       onClick={handleMicClick}
-      className={`absolute right-12 flex items-center justify-center w-8 h-8 rounded-full transition ${
+      className={`absolute right-14 flex h-9 w-9 items-center justify-center rounded-full transition ${
         isRecording
           ? "bg-red-500 text-white"
-          : "bg-gray-200 hover:bg-gray-300 text-gray-600"
+          : "bg-slate-100 hover:bg-slate-200 text-slate-600"
       }`}
       aria-label="Record voice"
     >

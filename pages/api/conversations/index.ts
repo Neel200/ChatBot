@@ -7,8 +7,16 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ): Promise<void> {
-  const userId = requireAuth(req);
-  if (!userId) return;
+  //const userId = requireAuth(req);
+  //if (!userId) return;
+  let userId: string;
+
+  try {
+    userId = requireAuth(req);
+  } catch {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
 
   await dbConnect();
 
@@ -25,9 +33,12 @@ export default async function handler(
 
 
   if (req.method === "GET") {
-    const conversations = await Conversation.find({ userId })
-      .sort({ createdAt: -1 })
-      .select("_id title createdAt");
+    const conversations = await Conversation.find({
+      userId,
+      archivedAt: null,
+    })
+      .sort({ updatedAt: -1 })
+      .select("_id title createdAt updatedAt archivedAt");
 
     res.status(200).json(conversations);
     return;

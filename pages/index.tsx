@@ -25,11 +25,12 @@ interface StoredMessage {
   role: "user" | "bot";
   text: string;
   createdAt: string;
+  file?: Message["file"];
 }
 
-interface CreateConversationResponse {
-  id: string;
-}
+//interface CreateConversationResponse {
+//  id: string;
+//}
 
 /* ================= PAGE ================= */
 
@@ -44,6 +45,8 @@ const ChatPage: NextPage = () => {
 
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   /* ================= REFS ================= */
 
@@ -52,7 +55,7 @@ const ChatPage: NextPage = () => {
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const creatingConversationRef = useRef(false);
+  //const creatingConversationRef = useRef(false);
   const hasLoadedConversationRef = useRef(false);
 
   /* ================= AUTH ================= */
@@ -72,9 +75,15 @@ const ChatPage: NextPage = () => {
   /* ================= CONVERSATION ================= */
 
   const startNewChat = () => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+
     setConversationId(null);
     setMessages([]);
     setTypingText("");
+    setLoading(false);
+    setSelectedFile(null);
     hasLoadedConversationRef.current = false;
   };
 
@@ -89,11 +98,14 @@ const ChatPage: NextPage = () => {
       if (!res.ok) return;
 
       const data = await res.json();
+      setConversationId(id);
 
       setMessages(
         data.messages.map((m: StoredMessage) => ({
+          _id: m._id,
           role: m.role,
           text: m.text,
+          file: m.file,
         }))
       );
 
@@ -110,7 +122,7 @@ const ChatPage: NextPage = () => {
 
   /* ================= AUTOSAVE ================= */
 
-  const saveMessage = useCallback(
+  /*const saveMessage = useCallback(
     async (text: string, role: "user" | "bot") => {
       if (!conversationId || !token) return;
 
@@ -128,7 +140,7 @@ const ChatPage: NextPage = () => {
       }
     },
     [conversationId, token]
-  );
+  );*/
 
   /* ================= AUTO SCROLL ================= */
 
@@ -149,7 +161,7 @@ const ChatPage: NextPage = () => {
   /* ================= TYPING EFFECT ================= */
 
   const typeEffect = useCallback(
-    (text: string) => {
+    (text: string, finalMessage?: Message) => {
       if (typingIntervalRef.current)
         clearInterval(typingIntervalRef.current);
 
@@ -162,8 +174,11 @@ const ChatPage: NextPage = () => {
           clearInterval(typingIntervalRef.current!);
 
           if (current) {
-            setMessages((p) => [...p, { role: "bot", text: current }]);
-            void saveMessage(current, "bot");
+            setMessages((p) => [
+              ...p,
+              finalMessage ? { ...finalMessage, text: current } : { role: "bot", text: current },
+            ]);
+            //void saveMessage(current, "bot");
           }
 
           setTypingText("");
@@ -177,8 +192,8 @@ const ChatPage: NextPage = () => {
         } else {
           clearInterval(typingIntervalRef.current!);
 
-          setMessages((p) => [...p, { role: "bot", text: text }]);
-          void saveMessage(text, "bot");
+          setMessages((p) => [...p, finalMessage ?? { role: "bot", text }]);
+          //void saveMessage(text, "bot");
 
           setTypingText("");
           setLoading(false);
@@ -186,7 +201,8 @@ const ChatPage: NextPage = () => {
         }
       }, 25);
     },
-    [saveMessage]
+    //[saveMessage]
+    []
   );
 
   /* ================= FILE ================= */
@@ -209,29 +225,11 @@ const ChatPage: NextPage = () => {
     if ((!input.trim() && !selectedFile) || loading) return;
     if (!token) return alert("Please log in");
 
-    let activeConversationId = conversationId;
 
-    if (!activeConversationId && !creatingConversationRef.current) {
-      creatingConversationRef.current = true;
-
-      const res = await fetch("/api/conversations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data: CreateConversationResponse = await res.json();
-      activeConversationId = data.id;
-      setConversationId(data.id);
-
-      creatingConversationRef.current = false;
-    }
-
+    const outgoingText = input.trim();
     const userMessage: Message = {
       role: "user",
-      text: input,
+      text: outgoingText || `Attached ${selectedFile?.name ?? "file"}`,
     };
 
     if (selectedFile) {
@@ -244,10 +242,10 @@ const ChatPage: NextPage = () => {
     }
 
     setMessages((p) => [...p, userMessage]);
-    await saveMessage(userMessage.text, "user");
+    //await saveMessage(userMessage.text, "user");
 
     const formData = new FormData();
-    if (input.trim()) formData.append("message", input);
+    if (outgoingText) formData.append("message", outgoingText);
     if (selectedFile) formData.append("file", selectedFile);
 
     setInput("");
@@ -258,10 +256,11 @@ const ChatPage: NextPage = () => {
     controllerRef.current = controller;
 
     try {
-      if (activeConversationId) {
-        formData.append("conversationId", activeConversationId);
+      if (conversationId) {
+        formData.append("conversationId", conversationId);
       }
 
+      
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -272,11 +271,48 @@ const ChatPage: NextPage = () => {
       if (!res.ok) throw new Error();
 
       const data: ApiResponse = await res.json();
-      typeEffect(data.reply ?? "No response");
+      
+      if (!conversationId && data.conversationId) {
+        hasLoadedConversationRef.current = true;
+        setConversationId(data.conversationId);
+      }
+
+      const savedMessages = data.messages ?? [];
+      const savedAssistantMessage =
+        savedMessages[savedMessages.length - 1]?.role === "bot"
+          ? savedMessages[savedMessages.length - 1]
+          : undefined;
+
+      if (savedMessages.length > 0) {
+        const visibleMessages = savedAssistantMessage
+          ? savedMessages.slice(0, -1)
+          : savedMessages;
+
+        setMessages(
+          visibleMessages.map((message, index) => {
+            const isLastUserMessage =
+              index === visibleMessages.length - 1 && message.role === "user";
+
+            return {
+              ...message,
+              file: isLastUserMessage
+                ? userMessage.file ?? message.file
+                : message.file,
+            };
+          })
+        );
+      }
+
+      setConversationRefreshKey((key) => key + 1);
+
+      typeEffect(
+        savedAssistantMessage?.text ?? data.reply ?? "No response",
+        savedAssistantMessage
+      );
     } catch {
       const errMsg = "⚠️ Something went wrong.";
       setMessages((p) => [...p, { role: "bot", text: errMsg }]);
-      void saveMessage(errMsg, "bot");
+      //void saveMessage(errMsg, "bot");
       setLoading(false);
     }
   };
@@ -292,7 +328,7 @@ const ChatPage: NextPage = () => {
 
     if (typingText) {
       setMessages((p) => [...p, { role: "bot", text: typingText }]);
-      void saveMessage(typingText, "bot");
+      //void saveMessage(typingText, "bot");
     }
 
     setTypingText("");
@@ -302,59 +338,123 @@ const ChatPage: NextPage = () => {
   /* ================= UI ================= */
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-[100dvh] overflow-hidden bg-[#f6f7fb] text-slate-950">
       {token && (
         <ConversationList
           token={token}
           activeConversationId={conversationId ?? undefined}
+          refreshKey={conversationRefreshKey}
+          isOpen={sidebarOpen}
+          onNewChat={startNewChat}
+          onClose={() => setSidebarOpen(false)}
           onSelect={(id) => {
+            controllerRef.current?.abort();
+            if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
             setConversationId(id);
             setMessages([]);
+            setTypingText("");
+            setLoading(false);
             hasLoadedConversationRef.current = false;
+          }}
+          onConversationRemoved={(removedConversationId) => {
+            if (removedConversationId === conversationId) {
+              startNewChat();
+            }
+            setConversationRefreshKey((key) => key + 1);
           }}
         />
       )}
 
-      <div className="flex-1 flex flex-col bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-500 pb-4 sm:pb-6">
-        <div className="flex-1 flex flex-col items-center justify-center overflow-hidden px-2 sm:px-4 py-4 sm:py-6">
+      <div className="flex-1 flex flex-col min-w-0 bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_34%),linear-gradient(135deg,#f8fafc,#eef2ff_52%,#f8fafc)]">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/75 px-3 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            {token && (
+              !sidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Open sidebar"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-lg text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md"
+                >
+                  +
+                </button>
+              )
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-600">
+                ChatBot
+              </p>
+              <h1 className="truncate text-base font-semibold text-slate-950 sm:text-lg">
+                AI workspace
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 text-sm font-medium sm:gap-3">
+            {!token ? (
+              <>
+                <Link
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md sm:px-4"
+                  href="/login"
+                >
+                  Login
+                </Link>
+                <Link
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md sm:px-4"
+                  href="/signup"
+                >
+                  Signup
+                </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md sm:px-4"
+                  onClick={startNewChat}
+                  type="button"
+                >
+                  New chat
+                </button>
+                <button
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md sm:px-4"
+                  onClick={logout}
+                  type="button"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        <div className="flex-1 flex min-h-0 flex-col items-center justify-start overflow-hidden px-3 py-3 sm:px-6 sm:py-5">
           <div
             ref={chatRef}
-            className={`w-full max-w-3xl flex-1 min-h-0 bg-white/15 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-3 sm:p-6 ${
+            className={`w-full max-w-4xl rounded-[28px] border border-white/80 bg-white/70 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl sm:p-6 ${
               messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"
+            } ${
+              messages.length > 0 || loading
+                ? "flex-1 min-h-0"
+                : "h-[min(52dvh,520px)] flex-none sm:h-[min(56dvh,560px)]"
             }`}
           >
-            {/* Header */}
-            <div className="flex justify-between items-center mb-2 text-sm text-white/80">
-              <div>{token && <button onClick={startNewChat}>New chat</button>}</div>
-
-              <div className="flex gap-3">
-                {!token ? (
-                  <>
-                    <Link href="/login">Login</Link>
-                    <Link href="/signup">Signup</Link>
-                  </>
-                ) : (
-                  <button onClick={logout}>Logout</button>
-                )}
-              </div>
-            </div>
-
-            {/* Empty state */}
             {messages.length === 0 && !loading && (
-              <div className="flex flex-col justify-center items-center h-[70vh] text-center space-y-4
-                opacity-0 translate-y-4 animate-[fadeSlideUp_1s_ease-out_forwards]">
-                <h1 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-lg">
-                  Start chatting with Gemini 🤖
+              <div className="flex h-full flex-col items-center justify-center text-center">
+                <div className="mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-indigo-600 text-2xl font-bold text-white shadow-lg shadow-indigo-200">
+                  C
+                </div>
+                <h1 className="max-w-xl text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                  Start a focused conversation
                 </h1>
-                <p className="text-gray-200 text-sm sm:text-base opacity-0 animate-[fadeIn_1.2s_ease-out_0.3s_forwards]">
-                  Type a message or attach a file below to begin.
+                <p className="mt-3 max-w-md text-sm leading-6 text-slate-500 sm:text-base">
+                  Ask a question, attach a document, or continue from the conversation history.
                 </p>
               </div>
             )}
 
             <div className="space-y-3 sm:space-y-4">
               {messages.map((m, i) => (
-                <ChatMessageBubble key={i} message={m} index={i} />
+                <ChatMessageBubble key={m._id ?? i} message={m} index={i} />
               ))}
 
               {typingText && <TypingBubble typingText={typingText} />}

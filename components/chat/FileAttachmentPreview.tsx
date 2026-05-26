@@ -15,7 +15,7 @@ export default function FileAttachmentPreview({ file }: Props) {
   const isPDF = file.mimeType === "application/pdf";
   const isText = file.mimeType.startsWith("text/") || isPDF;
 
-  if (isImage) {
+  if (isImage && file.url) {
     return (
       <div className="relative w-full max-w-sm h-48 mt-2">
         <Image

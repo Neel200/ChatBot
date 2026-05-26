@@ -13,6 +13,11 @@ const ConversationSchema = new Schema(
       type: String,
       required: true,
     },
+    archivedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );

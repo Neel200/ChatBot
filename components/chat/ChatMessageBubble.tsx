@@ -15,10 +15,10 @@ export default function ChatMessageBubble({ message, index }: Props) {
   return (
     <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`} key={index}>
       <div
-        className={`max-w-[85%] sm:max-w-xl p-2 sm:p-3 rounded-2xl shadow-sm break-words ${
+        className={`max-w-[88%] break-words rounded-[22px] p-3 text-sm leading-6 shadow-sm sm:max-w-2xl sm:p-4 sm:text-base ${
           message.role === "user"
-            ? "bg-indigo-500 text-white rounded-br-none"
-            : "bg-white/90 text-gray-900 rounded-bl-none"
+            ? "rounded-br-md bg-indigo-600 text-white shadow-indigo-200"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
         }`}
       >
         {message.file && (

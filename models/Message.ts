@@ -18,6 +18,10 @@ const MessageSchema = new Schema(
       type: String,
       required: true,
     },
+    file: {
+      name: String,
+      mimeType: String,
+    },
   },
   { timestamps: true }
 );
