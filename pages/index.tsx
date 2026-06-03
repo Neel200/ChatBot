@@ -68,6 +68,10 @@ const ChatPage: NextPage = () => {
   const chatRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const streamBufferRef = useRef("");      // tokens received from server
+  const streamDoneRef = useRef(false);     // has the stream finished?
+  const displayIndexRef = useRef(0);       // chars displayed so far
 
   //const creatingConversationRef = useRef(false);
   const hasLoadedConversationRef = useRef(false);
@@ -93,9 +97,18 @@ const ChatPage: NextPage = () => {
 
   /* ================= CONVERSATION ================= */
 
+  const resetTyping = () => {
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    typingIntervalRef.current = null;
+    streamBufferRef.current = "";
+    streamDoneRef.current = false;
+    displayIndexRef.current = 0;
+  };
+
   const startNewChat = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
+    resetTyping();
     setConversationId(null);
     setMessages([]);
     setTypingText("");
@@ -168,9 +181,14 @@ const ChatPage: NextPage = () => {
     const chat = chatRef.current;
     if (!chat) return;
 
-    const isNearBottom =
-      chat.scrollHeight - chat.scrollTop - chat.clientHeight < 150;
+    // Always follow when the bot is actively responding
+    if (typingText) {
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
 
+    // For new messages scroll if already near the bottom
+    const isNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 200;
     if (isNearBottom) {
       requestAnimationFrame(() => {
         chat.scrollTop = chat.scrollHeight;
@@ -220,9 +238,30 @@ const ChatPage: NextPage = () => {
     setSelectedFile(null);
     setLoading(true);
     setTypingText("");
+    resetTyping();
 
     const controller = new AbortController();
     controllerRef.current = controller;
+
+    // Start the 25ms display interval — drains streamBufferRef char by char
+    typingIntervalRef.current = setInterval(() => {
+      const buf = streamBufferRef.current;
+      const idx = displayIndexRef.current;
+
+      if (idx < buf.length) {
+        displayIndexRef.current = idx + 1;
+        setTypingText(buf.slice(0, idx + 1));
+      } else if (streamDoneRef.current) {
+        // Stream finished and every char has been displayed
+        clearInterval(typingIntervalRef.current!);
+        typingIntervalRef.current = null;
+        setMessages((p) => [...p, { role: "bot", text: buf }]);
+        setTypingText("");
+        setLoading(false);
+        controllerRef.current = null;
+      }
+      // If buf not done yet, interval waits for the next token
+    }, 25);
 
     try {
       const res = await authFetch("/api/chat", token, {
@@ -236,11 +275,10 @@ const ChatPage: NextPage = () => {
         throw new Error(errData?.error ?? `Server error ${res.status}`);
       }
 
-      // Read the stream — tokens arrive in real-time
+      // Stream tokens into the buffer — the interval above displays them
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let lineBuffer = "";
-      let fullText = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -256,8 +294,7 @@ const ChatPage: NextPage = () => {
           try {
             const parsed = JSON.parse(trimmed);
             if (typeof parsed.t === "string") {
-              fullText += parsed.t;
-              setTypingText(fullText);
+              streamBufferRef.current += parsed.t;
             } else if (parsed.done) {
               if (!conversationId && parsed.conversationId) {
                 hasLoadedConversationRef.current = true;
@@ -269,14 +306,11 @@ const ChatPage: NextPage = () => {
         }
       }
 
-      if (fullText) {
-        setMessages((p) => [...p, { role: "bot", text: fullText }]);
-      }
-      setTypingText("");
-      setLoading(false);
-      controllerRef.current = null;
+      // Signal the interval that no more tokens are coming
+      streamDoneRef.current = true;
 
     } catch (err: unknown) {
+      resetTyping();
       if ((err as Error).name === "AbortError") return;
       const msg = err instanceof Error ? err.message : "Something went wrong.";
       setMessages((p) => [...p, { role: "bot", text: `⚠️ ${msg}` }]);
@@ -290,8 +324,10 @@ const ChatPage: NextPage = () => {
   const stopGenerating = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
-    if (typingText) {
-      setMessages((p) => [...p, { role: "bot", text: typingText }]);
+    const displayed = streamBufferRef.current.slice(0, displayIndexRef.current);
+    resetTyping();
+    if (displayed) {
+      setMessages((p) => [...p, { role: "bot", text: displayed }]);
     }
     setTypingText("");
     setLoading(false);
