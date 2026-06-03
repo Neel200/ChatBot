@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 interface Conversation {
   _id: string;
@@ -80,9 +81,7 @@ export default function ConversationList({
       setLoading(true);
 
       try {
-        const res = await fetch("/api/conversations", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await authFetch("/api/conversations", token);
 
         if (!res.ok) {
           if (!cancelled) setConversations([]);
@@ -112,12 +111,9 @@ export default function ConversationList({
   };
 
   const archiveConversation = async (conversationId: string) => {
-    const res = await fetch(`/api/conversations/${conversationId}`, {
+    const res = await authFetch(`/api/conversations/${conversationId}`, token, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "archive" }),
     });
 
@@ -128,9 +124,8 @@ export default function ConversationList({
     const confirmed = window.confirm("Delete this chat permanently?");
     if (!confirmed) return;
 
-    const res = await fetch(`/api/conversations/${conversationId}`, {
+    const res = await authFetch(`/api/conversations/${conversationId}`, token, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (res.ok) removeConversationFromList(conversationId);

@@ -16,6 +16,7 @@ import ChatInput from "../components/chat/ChatInput";
 import ConversationList from "../components/sidebar/ConversationList";
 
 import { fileToDataURL } from "../utils/chatUtils";
+import { authFetch } from "../lib/authFetch";
 import type { Message, ApiResponse } from "../components/types/chatTypes";
 
 /* ================= TYPES ================= */
@@ -95,9 +96,7 @@ const ChatPage: NextPage = () => {
 
       setLoadingConversation(true);
       try {
-        const res = await fetch(`/api/conversations/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await authFetch(`/api/conversations/${id}`, token);
 
         if (!res.ok) return;
 
@@ -267,9 +266,8 @@ const ChatPage: NextPage = () => {
       }
 
       
-      const res = await fetch("/api/chat", {
+      const res = await authFetch("/api/chat", token, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
         signal: controller.signal,
       });
