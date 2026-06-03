@@ -78,6 +78,8 @@ const ChatPage: NextPage = () => {
   const displayIndexRef = useRef(0);       // chars displayed so far
   const voiceModeRef = useRef(false);      // mirrors voiceMode for use inside intervals
   voiceModeRef.current = voiceMode;
+  const ttsEndedRef = useRef(false);       // has TTS finished speaking?
+  const typingEndedRef = useRef(false);    // has the typing animation finished?
 
   //const creatingConversationRef = useRef(false);
   const hasLoadedConversationRef = useRef(false);
@@ -109,6 +111,8 @@ const ChatPage: NextPage = () => {
     streamBufferRef.current = "";
     streamDoneRef.current = false;
     displayIndexRef.current = 0;
+    ttsEndedRef.current = false;
+    typingEndedRef.current = false;
   };
 
   const startNewChat = () => {
@@ -281,12 +285,10 @@ const ChatPage: NextPage = () => {
         setTypingText("");
         setLoading(false);
         controllerRef.current = null;
-        if (voiceModeRef.current) {
-          setIsSpeaking(true);
-          speak(buf, () => {
-            setIsSpeaking(false);
-            setAutoRecordTrigger((t) => t + 1);
-          });
+        typingEndedRef.current = true;
+        // Restart mic only after BOTH typing and TTS are done
+        if (voiceModeRef.current && ttsEndedRef.current) {
+          setAutoRecordTrigger((t) => t + 1);
         }
       }
       // If buf not done yet, interval waits for the next token
@@ -337,6 +339,20 @@ const ChatPage: NextPage = () => {
 
       // Signal the interval that no more tokens are coming
       streamDoneRef.current = true;
+
+      // START TTS NOW so voice begins at the same time as the typing animation
+      if (voiceModeRef.current) {
+        const textToSpeak = streamBufferRef.current;
+        setIsSpeaking(true);
+        speak(textToSpeak, () => {
+          setIsSpeaking(false);
+          ttsEndedRef.current = true;
+          // Restart mic only after BOTH typing and TTS are done
+          if (typingEndedRef.current && voiceModeRef.current) {
+            setAutoRecordTrigger((t) => t + 1);
+          }
+        });
+      }
 
     } catch (err: unknown) {
       resetTyping();
