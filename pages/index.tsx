@@ -222,7 +222,7 @@ const ChatPage: NextPage = () => {
           setLoading(false);
           controllerRef.current = null;
         }
-      }, 8);
+      }, 25);
     },
     //[saveMessage]
     []
