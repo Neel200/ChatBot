@@ -205,7 +205,7 @@ const ChatPage: NextPage = () => {
           setLoading(false);
           controllerRef.current = null;
         }
-      }, 25);
+      }, 8);
     },
     //[saveMessage]
     []
