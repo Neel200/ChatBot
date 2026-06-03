@@ -5,13 +5,11 @@ import mongoose from "mongoose";
 
 import { dbConnect } from "@/lib/dbConnect";
 import { requireAuth } from "@/lib/api/requireAuth";
-
 import { parseForm } from "@/lib/api/parseForm";
 import { buildFileContent } from "@/lib/api/buildFileContent";
 import { buildChatMessages } from "@/lib/api/buildChatMessages";
-import { callOpenAIVision } from "@/lib/api/callOpenAIVision";
+import { streamOpenAIVision } from "@/lib/api/callOpenAIVision";
 import { audioToText } from "@/lib/api/audioToText";
-import { formatSavedMessage } from "@/lib/api/formatSavedMessage";
 import { generateConversationTitle } from "@/lib/api/generateConversationTitle";
 
 import { Conversation } from "@/models/Conversation";
@@ -23,10 +21,7 @@ export const config = {
   api: { bodyParser: false },
 };
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -48,15 +43,9 @@ export default async function handler(
 
     const [fields, files]: [Fields, Files] = await parseForm(req);
 
-    const rawContent = Array.isArray(fields.message)
-      ? fields.message[0]
-      : fields.message;
-    const conversationId = Array.isArray(fields.conversationId)
-      ? fields.conversationId[0]
-      : fields.conversationId;
-    const uploadedFile = Array.isArray(files.file)
-      ? (files.file[0] as File | undefined)
-      : (files.file as File | undefined);
+    const rawContent = Array.isArray(fields.message) ? fields.message[0] : fields.message;
+    const conversationId = Array.isArray(fields.conversationId) ? fields.conversationId[0] : fields.conversationId;
+    const uploadedFile = Array.isArray(files.file) ? (files.file[0] as File | undefined) : (files.file as File | undefined);
     const content = typeof rawContent === "string" ? rawContent.trim() : "";
 
     if (!content && !uploadedFile) {
@@ -65,30 +54,22 @@ export default async function handler(
 
     let conversation;
     const isNewConversation = !conversationId;
+
     if (conversationId) {
       if (!mongoose.Types.ObjectId.isValid(conversationId)) {
         return res.status(400).json({ error: "Invalid conversation id" });
       }
-
-      conversation = await Conversation.findOne({
-        _id: conversationId,
-        userId,
-      });
-
+      conversation = await Conversation.findOne({ _id: conversationId, userId });
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
     } else {
-      conversation = await Conversation.create({
-        userId,
-        title: "New chat",
-      });
+      conversation = await Conversation.create({ userId, title: "New chat" });
     }
 
     let fileParts: FileContentPart[] = [];
     if (uploadedFile) {
       const mime = uploadedFile.mimetype ?? "";
-
       if (mime.startsWith("audio/")) {
         const transcript = await audioToText(uploadedFile);
         fileParts.push({ type: "text", text: transcript });
@@ -97,61 +78,79 @@ export default async function handler(
       }
     }
 
-    const dbMessages = await Message.find({
-      conversationId: conversation._id,
-    })
+    const dbMessages = await Message.find({ conversationId: conversation._id })
       .sort({ createdAt: 1 })
       .select("role content -_id");
 
-    const chatMessages: ChatMessage[] = buildChatMessages(
-      dbMessages,
-      content,
-      fileParts
-    );
+    const chatMessages: ChatMessage[] = buildChatMessages(dbMessages, content, fileParts);
 
     await Message.create({
       conversationId: conversation._id,
       role: "user",
       content: content || `Attached ${uploadedFile?.originalFilename ?? "file"}`,
       file: uploadedFile
-        ? {
-            name: uploadedFile.originalFilename ?? "file",
-            mimeType: uploadedFile.mimetype ?? "application/octet-stream",
-          }
+        ? { name: uploadedFile.originalFilename ?? "file", mimeType: uploadedFile.mimetype ?? "application/octet-stream" }
         : undefined,
     });
 
-    const reply = await callOpenAIVision(apiKey, chatMessages);
+    // --- Start streaming response ---
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const azureRes = await streamOpenAIVision(apiKey, chatMessages);
+    const reader = azureRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let sseBuffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+
+        try {
+          const json = JSON.parse(data);
+          const token: string = json.choices?.[0]?.delta?.content ?? "";
+          if (token) {
+            fullText += token;
+            // Send each token as a JSON line so the client can parse safely
+            res.write(JSON.stringify({ t: token }) + "\n");
+          }
+        } catch { /* ignore malformed SSE lines */ }
+      }
+    }
+
+    // Save assistant message and update conversation after stream ends
+    await Message.create({ conversationId: conversation._id, role: "assistant", content: fullText });
 
     if (isNewConversation) {
       conversation.title = await generateConversationTitle(
-        apiKey,
-        content,
-        reply,
-        uploadedFile?.originalFilename ?? undefined
+        apiKey, content, fullText, uploadedFile?.originalFilename ?? undefined
       );
     }
-
-    await Message.create({
-      conversationId: conversation._id,
-      role: "assistant",
-      content: reply,
-    });
-
     conversation.updatedAt = new Date();
     await conversation.save();
 
-    const savedMessages = await Message.find({
-      conversationId: conversation._id,
-    }).sort({ createdAt: 1 });
+    // Send final metadata so the client knows the conversation ID
+    res.end(JSON.stringify({ done: true, conversationId: conversation._id.toString() }) + "\n");
 
-    return res.status(200).json({
-      conversationId: conversation._id.toString(),
-      reply,
-      messages: savedMessages.map(formatSavedMessage),
-    });
   } catch (error) {
     console.error("chat.ts error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    // If headers already sent (streaming started), we can't send a JSON error
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    } else {
+      res.end();
+    }
   }
 }

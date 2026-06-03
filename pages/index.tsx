@@ -67,7 +67,6 @@ const ChatPage: NextPage = () => {
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   //const creatingConversationRef = useRef(false);
@@ -97,8 +96,6 @@ const ChatPage: NextPage = () => {
   const startNewChat = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
-    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-
     setConversationId(null);
     setMessages([]);
     setTypingText("");
@@ -181,53 +178,6 @@ const ChatPage: NextPage = () => {
     }
   }, [messages, typingText]);
 
-  /* ================= TYPING EFFECT ================= */
-
-  const typeEffect = useCallback(
-    (text: string, finalMessage?: Message) => {
-      if (typingIntervalRef.current)
-        clearInterval(typingIntervalRef.current);
-
-      let current = "";
-      let index = 0;
-      setTypingText("");
-
-      typingIntervalRef.current = setInterval(() => {
-        if (!controllerRef.current) {
-          clearInterval(typingIntervalRef.current!);
-
-          if (current) {
-            setMessages((p) => [
-              ...p,
-              finalMessage ? { ...finalMessage, text: current } : { role: "bot", text: current },
-            ]);
-            //void saveMessage(current, "bot");
-          }
-
-          setTypingText("");
-          setLoading(false);
-          return;
-        }
-
-        if (index < text.length) {
-          current += text[index++];
-          setTypingText(current);
-        } else {
-          clearInterval(typingIntervalRef.current!);
-
-          setMessages((p) => [...p, finalMessage ?? { role: "bot", text }]);
-          //void saveMessage(text, "bot");
-
-          setTypingText("");
-          setLoading(false);
-          controllerRef.current = null;
-        }
-      }, 25);
-    },
-    //[saveMessage]
-    []
-  );
-
   /* ================= FILE ================= */
 
   const handleFileChange = async (
@@ -246,8 +196,7 @@ const ChatPage: NextPage = () => {
 
   const sendMessage = async () => {
     if ((!input.trim() && !selectedFile) || loading) return;
-    if (!token) return alert("Please log in");
-
+    if (!token) return;
 
     const outgoingText = input.trim();
     const userMessage: Message = {
@@ -257,33 +206,25 @@ const ChatPage: NextPage = () => {
 
     if (selectedFile) {
       const dataURL = await fileToDataURL(selectedFile);
-      userMessage.file = {
-        name: selectedFile.name,
-        url: dataURL,
-        mimeType: selectedFile.type,
-      };
+      userMessage.file = { name: selectedFile.name, url: dataURL, mimeType: selectedFile.type };
     }
 
     setMessages((p) => [...p, userMessage]);
-    //await saveMessage(userMessage.text, "user");
 
     const formData = new FormData();
     if (outgoingText) formData.append("message", outgoingText);
     if (selectedFile) formData.append("file", selectedFile);
+    if (conversationId) formData.append("conversationId", conversationId);
 
     setInput("");
     setSelectedFile(null);
     setLoading(true);
+    setTypingText("");
 
     const controller = new AbortController();
     controllerRef.current = controller;
 
     try {
-      if (conversationId) {
-        formData.append("conversationId", conversationId);
-      }
-
-      
       const res = await authFetch("/api/chat", token, {
         method: "POST",
         body: formData,
@@ -295,50 +236,51 @@ const ChatPage: NextPage = () => {
         throw new Error(errData?.error ?? `Server error ${res.status}`);
       }
 
-      const data: ApiResponse = await res.json();
-      
-      if (!conversationId && data.conversationId) {
-        hasLoadedConversationRef.current = true;
-        setConversationId(data.conversationId);
+      // Read the stream — tokens arrive in real-time
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let lineBuffer = "";
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        lineBuffer += decoder.decode(value, { stream: true });
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (typeof parsed.t === "string") {
+              fullText += parsed.t;
+              setTypingText(fullText);
+            } else if (parsed.done) {
+              if (!conversationId && parsed.conversationId) {
+                hasLoadedConversationRef.current = true;
+                setConversationId(parsed.conversationId);
+              }
+              setConversationRefreshKey((k) => k + 1);
+            }
+          } catch { /* ignore malformed lines */ }
+        }
       }
 
-      const savedMessages = data.messages ?? [];
-      const savedAssistantMessage =
-        savedMessages[savedMessages.length - 1]?.role === "bot"
-          ? savedMessages[savedMessages.length - 1]
-          : undefined;
-
-      if (savedMessages.length > 0) {
-        const visibleMessages = savedAssistantMessage
-          ? savedMessages.slice(0, -1)
-          : savedMessages;
-
-        setMessages(
-          visibleMessages.map((message, index) => {
-            const isLastUserMessage =
-              index === visibleMessages.length - 1 && message.role === "user";
-
-            return {
-              ...message,
-              file: isLastUserMessage
-                ? userMessage.file ?? message.file
-                : message.file,
-            };
-          })
-        );
+      if (fullText) {
+        setMessages((p) => [...p, { role: "bot", text: fullText }]);
       }
+      setTypingText("");
+      setLoading(false);
+      controllerRef.current = null;
 
-      setConversationRefreshKey((key) => key + 1);
-
-      typeEffect(
-        savedAssistantMessage?.text ?? data.reply ?? "No response",
-        savedAssistantMessage
-      );
     } catch (err: unknown) {
+      if ((err as Error).name === "AbortError") return;
       const msg = err instanceof Error ? err.message : "Something went wrong.";
-      const errMsg = `⚠️ ${msg}`;
-      setMessages((p) => [...p, { role: "bot", text: errMsg }]);
-      //void saveMessage(errMsg, "bot");
+      setMessages((p) => [...p, { role: "bot", text: `⚠️ ${msg}` }]);
+      setTypingText("");
       setLoading(false);
     }
   };
@@ -348,15 +290,9 @@ const ChatPage: NextPage = () => {
   const stopGenerating = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
-
-    if (typingIntervalRef.current)
-      clearInterval(typingIntervalRef.current);
-
     if (typingText) {
       setMessages((p) => [...p, { role: "bot", text: typingText }]);
-      //void saveMessage(typingText, "bot");
     }
-
     setTypingText("");
     setLoading(false);
   };
@@ -375,7 +311,6 @@ const ChatPage: NextPage = () => {
           onClose={() => setSidebarOpen(false)}
           onSelect={(id) => {
             controllerRef.current?.abort();
-            if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
             setConversationId(id);
             setMessages([]);
             setTypingText("");
