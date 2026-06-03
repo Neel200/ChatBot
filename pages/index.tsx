@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import type { NextPage } from "next";
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 import ChatMessageBubble from "../components/chat/ChatMessageBubble";
 import TypingBubble from "../components/chat/TypingBubble";
@@ -33,6 +34,17 @@ interface StoredMessage {
 //  id: string;
 //}
 
+/* ================= HELPERS ================= */
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 /* ================= PAGE ================= */
 
 const ChatPage: NextPage = () => {
@@ -44,6 +56,7 @@ const ChatPage: NextPage = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
+  const router = useRouter();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
@@ -64,8 +77,13 @@ const ChatPage: NextPage = () => {
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
-    if (storedToken) setToken(storedToken);
-  }, []);
+    if (!storedToken || isTokenExpired(storedToken)) {
+      localStorage.removeItem("token");
+      router.replace("/login");
+      return;
+    }
+    setToken(storedToken);
+  }, [router]);
 
   const logout = () => {
     localStorage.removeItem("token");
