@@ -18,7 +18,7 @@ import ConversationList from "../components/sidebar/ConversationList";
 
 import { fileToDataURL } from "../utils/chatUtils";
 import { authFetch } from "../lib/authFetch";
-import { speak, stopSpeaking } from "../lib/tts";
+import { speak, stopSpeaking, unlockTTS } from "../lib/tts";
 import type { Message, ApiResponse } from "../components/types/chatTypes";
 
 /* ================= TYPES ================= */
@@ -136,6 +136,9 @@ const ChatPage: NextPage = () => {
       stopSpeaking();
       setIsSpeaking(false);
     } else {
+      // Unlock speech synthesis NOW while we still have the user-gesture context.
+      // After an async fetch/await the browser blocks speechSynthesis.speak().
+      unlockTTS();
       setVoiceMode(true);
       setAutoRecordTrigger((t) => t + 1);
     }
