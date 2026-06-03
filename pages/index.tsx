@@ -274,7 +274,10 @@ const ChatPage: NextPage = () => {
         signal: controller.signal,
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error ?? `Server error ${res.status}`);
+      }
 
       const data: ApiResponse = await res.json();
       
@@ -315,8 +318,9 @@ const ChatPage: NextPage = () => {
         savedAssistantMessage?.text ?? data.reply ?? "No response",
         savedAssistantMessage
       );
-    } catch {
-      const errMsg = "⚠️ Something went wrong.";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      const errMsg = `⚠️ ${msg}`;
       setMessages((p) => [...p, { role: "bot", text: errMsg }]);
       //void saveMessage(errMsg, "bot");
       setLoading(false);
