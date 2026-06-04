@@ -59,7 +59,7 @@ export default function ChatInput({
   };
 
   return (
-    <div className="w-full max-w-4xl mt-2 px-0 sm:mt-4 sm:px-1">
+    <div className="w-full max-w-4xl mt-2 px-0 sm:mt-4 sm:px-1 animate-slide-up" style={{ animationDelay: "0.2s" }}>
       {selectedFile && (
         <div className="mb-2 flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur-md">
           <span className="mr-2 truncate text-sm font-medium text-slate-700">

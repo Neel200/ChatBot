@@ -80,6 +80,7 @@ const ChatPage: NextPage = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [welcomeKey, setWelcomeKey] = useState(0);
 
   const router = useRouter();
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -142,6 +143,7 @@ const ChatPage: NextPage = () => {
     setLoadingConversation(false);
     setSelectedFile(null);
     hasLoadedConversationRef.current = false;
+    setWelcomeKey((k) => k + 1);
   };
 
   const loadConversation = useCallback(
@@ -401,7 +403,7 @@ const ChatPage: NextPage = () => {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_34%),linear-gradient(135deg,#f8fafc,#eef2ff_52%,#f8fafc)]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_34%),linear-gradient(135deg,#f8fafc,#eef2ff_52%,#f8fafc)] animate-fade-in">
         <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/75 px-3 backdrop-blur-xl sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             {token && !sidebarOpen && (
@@ -498,19 +500,31 @@ const ChatPage: NextPage = () => {
             )}
 
             {messages.length === 0 && !loading && !loadingConversation && (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-xl shadow-indigo-200">
+              <div key={welcomeKey} className="flex h-full flex-col items-center justify-center text-center">
+                <div
+                  className="animate-slide-up mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-xl shadow-indigo-200"
+                  style={{ animationDelay: "0.05s" }}
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8">
                     <path fillRule="evenodd" d="M9 4.5a.75.75 0 0 1 .721.544l.813 2.846a3.75 3.75 0 0 0 2.576 2.576l2.846.813a.75.75 0 0 1 0 1.442l-2.846.813a3.75 3.75 0 0 0-2.576 2.576l-.813 2.846a.75.75 0 0 1-1.442 0l-.813-2.846a3.75 3.75 0 0 0-2.576-2.576l-2.846-.813a.75.75 0 0 1 0-1.442l2.846-.813A3.75 3.75 0 0 0 7.466 7.89l.813-2.846A.75.75 0 0 1 9 4.5ZM18 1.5a.75.75 0 0 1 .728.568l.258 1.036c.236.94.97 1.674 1.91 1.91l1.036.258a.75.75 0 0 1 0 1.456l-1.036.258c-.94.236-1.674.97-1.91 1.91l-.258 1.036a.75.75 0 0 1-1.456 0l-.258-1.036a2.625 2.625 0 0 0-1.91-1.91l-1.036-.258a.75.75 0 0 1 0-1.456l1.036-.258a2.625 2.625 0 0 0 1.91-1.91l.258-1.036A.75.75 0 0 1 18 1.5Z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <h1 className="max-w-xl text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                <h1
+                  className="animate-slide-up max-w-xl text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl"
+                  style={{ animationDelay: "0.13s" }}
+                >
                   What can I help with?
                 </h1>
-                <p className="mt-3 max-w-md text-sm leading-6 text-slate-500 sm:text-base">
+                <p
+                  className="animate-slide-up mt-3 max-w-md text-sm leading-6 text-slate-500 sm:text-base"
+                  style={{ animationDelay: "0.19s" }}
+                >
                   Ask a question, attach a document, or continue a saved conversation.
                 </p>
-                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                <div
+                  className="animate-slide-up mt-6 flex flex-wrap justify-center gap-2"
+                  style={{ animationDelay: "0.25s" }}
+                >
                   {[
                     "Explain a complex topic simply",
                     "Write or review my code",
