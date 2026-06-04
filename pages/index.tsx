@@ -45,6 +45,31 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
+/* ================= CONVERSATION CACHE ================= */
+
+const LS_CONV_PREFIX = "cv_";
+
+function readConvCache(mem: Map<string, Message[]>, id: string): Message[] | null {
+  const hit = mem.get(id);
+  if (hit) return hit;
+  try {
+    const raw = localStorage.getItem(LS_CONV_PREFIX + id);
+    if (!raw) return null;
+    const msgs = JSON.parse(raw) as Message[];
+    mem.set(id, msgs);
+    return msgs;
+  } catch {
+    return null;
+  }
+}
+
+function writeConvCache(mem: Map<string, Message[]>, id: string, msgs: Message[]): void {
+  mem.set(id, msgs);
+  try {
+    localStorage.setItem(LS_CONV_PREFIX + id, JSON.stringify(msgs));
+  } catch { /* quota exceeded — skip */ }
+}
+
 /* ================= PAGE ================= */
 
 const ChatPage: NextPage = () => {
@@ -123,28 +148,16 @@ const ChatPage: NextPage = () => {
     async (id: string) => {
       if (!token) return;
 
-      const toMessages = (raw: StoredMessage[]): Message[] =>
-        raw.map((m) => ({ _id: m._id, role: m.role, text: m.text, file: m.file }));
-
-      // Cache hit — show instantly, no network round-trip
-      const cached = conversationCacheRef.current.get(id);
-      if (cached) {
-        setLoadingConversation(false);
-        setConversationId(id);
-        setMessages(cached);
-        hasLoadedConversationRef.current = true;
-        return;
-      }
-
-      // Cache miss — fetch from server, then cache
-      setLoadingConversation(true);
       try {
         const res = await authFetch(`/api/conversations/${id}`, token);
         if (!res.ok) return;
 
         const data = await res.json();
-        const msgs = toMessages(data.messages);
-        conversationCacheRef.current.set(id, msgs);
+        const msgs: Message[] = data.messages.map((m: StoredMessage) => ({
+          _id: m._id, role: m.role, text: m.text, file: m.file,
+        }));
+
+        writeConvCache(conversationCacheRef.current, id, msgs);
         setConversationId(id);
         setMessages(msgs);
         hasLoadedConversationRef.current = true;
@@ -223,8 +236,9 @@ const ChatPage: NextPage = () => {
     if ((!input.trim() && !selectedFile) || loading) return;
     if (!token) return;
 
-    // Stale after new message — remove so next open re-fetches
+    // Invalidate cache for this conversation — will be re-written after bot responds
     if (conversationId) conversationCacheRef.current.delete(conversationId);
+    let liveConvId = conversationId; // tracks the id inside closures (may change for new convs)
 
     const outgoingText = input.trim();
     const userMessage: Message = {
@@ -265,7 +279,11 @@ const ChatPage: NextPage = () => {
         // Stream finished and every char has been displayed
         clearInterval(typingIntervalRef.current!);
         typingIntervalRef.current = null;
-        setMessages((p) => [...p, { role: "bot", text: buf }]);
+        setMessages((p) => {
+          const updated: Message[] = [...p, { role: "bot" as const, text: buf }];
+          if (liveConvId) writeConvCache(conversationCacheRef.current, liveConvId, updated);
+          return updated;
+        });
         setTypingText("");
         setLoading(false);
         controllerRef.current = null;
@@ -307,6 +325,7 @@ const ChatPage: NextPage = () => {
               streamBufferRef.current += parsed.t;
             } else if (parsed.done) {
               if (!conversationId && parsed.conversationId) {
+                liveConvId = parsed.conversationId;
                 hasLoadedConversationRef.current = true;
                 setConversationId(parsed.conversationId);
               }
@@ -357,12 +376,21 @@ const ChatPage: NextPage = () => {
           onClose={() => setSidebarOpen(false)}
           onSelect={(id) => {
             controllerRef.current?.abort();
-            setConversationId(id);
-            setMessages([]);
+            resetTyping();
             setTypingText("");
             setLoading(false);
-            setLoadingConversation(true);
-            hasLoadedConversationRef.current = false;
+            const cached = readConvCache(conversationCacheRef.current, id);
+            if (cached) {
+              // Instant — no skeleton, no flash
+              setMessages(cached);
+              setLoadingConversation(false);
+              hasLoadedConversationRef.current = false; // still re-fetch silently
+            } else {
+              setMessages([]);
+              setLoadingConversation(true);
+              hasLoadedConversationRef.current = false;
+            }
+            setConversationId(id);
           }}
           onConversationRemoved={(removedConversationId) => {
             if (removedConversationId === conversationId) {
