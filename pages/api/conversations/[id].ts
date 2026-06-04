@@ -31,10 +31,25 @@ export default async function handler(
       return res.status(400).json({ error: "Invalid conversation id" });
     }
 
-    const conversation = await Conversation.findOne({
-      _id: id,
-      userId,
-    });
+    // For GET requests run both queries in parallel — saves one DB round-trip
+    if (req.method === "GET") {
+      const [conversation, messages] = await Promise.all([
+        Conversation.findOne({ _id: id, userId }),
+        Message.find({ conversationId: id }).sort({ createdAt: 1 }),
+      ]);
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      return res.status(200).json({
+        conversation,
+        messages: messages.map(formatSavedMessage),
+      });
+    }
+
+    // PATCH / DELETE still need the ownership check first
+    const conversation = await Conversation.findOne({ _id: id, userId });
 
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
@@ -59,15 +74,6 @@ export default async function handler(
 
       return res.status(200).json({ success: true });
     }
-
-    const messages = await Message.find({
-      conversationId: conversation._id,
-    }).sort({ createdAt: 1 });
-
-    return res.status(200).json({
-      conversation,
-      messages: messages.map(formatSavedMessage),
-    });
   } catch (error) {
     console.error("conversation fetch error:", error);
     return res.status(500).json({ error: "Internal server error" });

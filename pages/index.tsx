@@ -75,6 +75,7 @@ const ChatPage: NextPage = () => {
 
   //const creatingConversationRef = useRef(false);
   const hasLoadedConversationRef = useRef(false);
+  const conversationCacheRef = useRef<Map<string, Message[]>>(new Map());
 
   /* ================= AUTH ================= */
 
@@ -122,24 +123,30 @@ const ChatPage: NextPage = () => {
     async (id: string) => {
       if (!token) return;
 
+      const toMessages = (raw: StoredMessage[]): Message[] =>
+        raw.map((m) => ({ _id: m._id, role: m.role, text: m.text, file: m.file }));
+
+      // Cache hit — show instantly, no network round-trip
+      const cached = conversationCacheRef.current.get(id);
+      if (cached) {
+        setLoadingConversation(false);
+        setConversationId(id);
+        setMessages(cached);
+        hasLoadedConversationRef.current = true;
+        return;
+      }
+
+      // Cache miss — fetch from server, then cache
       setLoadingConversation(true);
       try {
         const res = await authFetch(`/api/conversations/${id}`, token);
-
         if (!res.ok) return;
 
         const data = await res.json();
+        const msgs = toMessages(data.messages);
+        conversationCacheRef.current.set(id, msgs);
         setConversationId(id);
-
-        setMessages(
-          data.messages.map((m: StoredMessage) => ({
-            _id: m._id,
-            role: m.role,
-            text: m.text,
-            file: m.file,
-          }))
-        );
-
+        setMessages(msgs);
         hasLoadedConversationRef.current = true;
       } finally {
         setLoadingConversation(false);
@@ -215,6 +222,9 @@ const ChatPage: NextPage = () => {
   const sendMessage = async () => {
     if ((!input.trim() && !selectedFile) || loading) return;
     if (!token) return;
+
+    // Stale after new message — remove so next open re-fetches
+    if (conversationId) conversationCacheRef.current.delete(conversationId);
 
     const outgoingText = input.trim();
     const userMessage: Message = {
