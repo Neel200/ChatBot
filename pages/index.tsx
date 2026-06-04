@@ -18,7 +18,6 @@ import ConversationList from "../components/sidebar/ConversationList";
 
 import { fileToDataURL } from "../utils/chatUtils";
 import { authFetch } from "../lib/authFetch";
-import { speak, stopSpeaking } from "../lib/tts";
 import type { Message, ApiResponse } from "../components/types/chatTypes";
 
 /* ================= TYPES ================= */
@@ -56,9 +55,6 @@ const ChatPage: NextPage = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [autoRecordTrigger, setAutoRecordTrigger] = useState(0);
 
   const router = useRouter();
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -76,8 +72,6 @@ const ChatPage: NextPage = () => {
   const streamBufferRef = useRef("");      // tokens received from server
   const streamDoneRef = useRef(false);     // has the stream finished?
   const displayIndexRef = useRef(0);       // chars displayed so far
-  const voiceModeRef = useRef(false);      // mirrors voiceMode for use inside intervals
-  voiceModeRef.current = voiceMode;
 
   //const creatingConversationRef = useRef(false);
   const hasLoadedConversationRef = useRef(false);
@@ -114,8 +108,6 @@ const ChatPage: NextPage = () => {
   const startNewChat = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
-    stopSpeaking();
-    setIsSpeaking(false);
     resetTyping();
     setConversationId(null);
     setMessages([]);
@@ -124,17 +116,6 @@ const ChatPage: NextPage = () => {
     setLoadingConversation(false);
     setSelectedFile(null);
     hasLoadedConversationRef.current = false;
-  };
-
-  const toggleVoiceMode = () => {
-    if (voiceMode) {
-      setVoiceMode(false);
-      stopSpeaking();
-      setIsSpeaking(false);
-    } else {
-      setVoiceMode(true);
-      setAutoRecordTrigger((t) => t + 1);
-    }
   };
 
   const loadConversation = useCallback(
@@ -231,14 +212,11 @@ const ChatPage: NextPage = () => {
 
   /* ================= SEND MESSAGE ================= */
 
-  const sendMessage = async (overrideText?: string) => {
-    const outgoingText = (overrideText !== undefined ? overrideText : input).trim();
-    if ((!outgoingText && !selectedFile) || loading) return;
+  const sendMessage = async () => {
+    if ((!input.trim() && !selectedFile) || loading) return;
     if (!token) return;
 
-    stopSpeaking();
-    setIsSpeaking(false);
-
+    const outgoingText = input.trim();
     const userMessage: Message = {
       role: "user",
       text: outgoingText || `Attached ${selectedFile?.name ?? "file"}`,
@@ -256,7 +234,7 @@ const ChatPage: NextPage = () => {
     if (selectedFile) formData.append("file", selectedFile);
     if (conversationId) formData.append("conversationId", conversationId);
 
-    if (overrideText === undefined) setInput("");
+    setInput("");
     setSelectedFile(null);
     setLoading(true);
     setTypingText("");
@@ -281,13 +259,6 @@ const ChatPage: NextPage = () => {
         setTypingText("");
         setLoading(false);
         controllerRef.current = null;
-        if (voiceModeRef.current) {
-          setIsSpeaking(true);
-          speak(buf, () => {
-            setIsSpeaking(false);
-            setAutoRecordTrigger((t) => t + 1);
-          });
-        }
       }
       // If buf not done yet, interval waits for the next token
     }, 25);
@@ -353,8 +324,6 @@ const ChatPage: NextPage = () => {
   const stopGenerating = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
-    stopSpeaking();
-    setIsSpeaking(false);
     const displayed = streamBufferRef.current.slice(0, displayIndexRef.current);
     resetTyping();
     if (displayed) {
@@ -546,11 +515,6 @@ const ChatPage: NextPage = () => {
             isRecording={isRecording}
             setIsRecording={setIsRecording}
             fileInputRef={fileInputRef}
-            voiceMode={voiceMode}
-            onToggleVoiceMode={toggleVoiceMode}
-            isSpeaking={isSpeaking}
-            onAutoSend={(text) => { void sendMessage(text); }}
-            autoStartTrigger={autoRecordTrigger}
           />
         </div>
       </div>
