@@ -100,6 +100,14 @@ export default function ConversationList({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
 
+  // Entrance animation: hidden until main page settles, then slides in once
+  const [mounted, setMounted] = useState(false);
+  const [animDone, setAnimDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 320);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     if (!token) return;
 
@@ -166,11 +174,13 @@ export default function ConversationList({
     if (res.ok) removeConversationFromList(conversationId);
   };
 
+  const entranceClass = !mounted ? "opacity-0" : !animDone ? "animate-sidebar-in" : "";
+
   const sidebarClasses = `fixed inset-y-0 left-0 z-40 flex w-[min(18rem,86vw)] shrink-0 flex-col border-r border-white/10 bg-slate-950 text-white shadow-2xl transition-all duration-300 md:relative md:shadow-none ${
     isOpen
       ? "translate-x-0 md:w-72"
       : "-translate-x-full md:w-0 md:overflow-hidden md:border-r-0"
-  }`;
+  } ${entranceClass}`;
 
   return (
     <>
@@ -183,7 +193,7 @@ export default function ConversationList({
         />
       )}
 
-      <aside className={sidebarClasses}>
+      <aside className={sidebarClasses} onAnimationEnd={() => setAnimDone(true)}>
         <div className="border-b border-white/10 p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-950/40">

@@ -83,6 +83,15 @@ button:disabled {
   animation: fadeIn 0.4s ease-out both;
 }
 
+.animate-sidebar-in {
+  animation: sidebarIn 0.45s ease-out both;
+}
+
+@keyframes sidebarIn {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 .animate-slide-up {
   animation: fadeSlideUp 0.45s ease-out both;
 }
