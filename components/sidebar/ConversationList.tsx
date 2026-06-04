@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authFetch } from "@/lib/authFetch";
 
 interface Conversation {
@@ -20,6 +20,29 @@ interface Props {
   onClose: () => void;
   onSelect: (conversationId: string) => void;
   onConversationRemoved?: (conversationId: string) => void;
+}
+
+function userIdFromToken(token: string): string {
+  try {
+    return JSON.parse(atob(token.split(".")[1])).userId ?? "u";
+  } catch {
+    return "u";
+  }
+}
+
+function readCache(key: string): Conversation[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as Conversation[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCache(key: string, data: Conversation[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch { /* storage full — ignore */ }
 }
 
 function relativeTime(dateStr: string): string {
@@ -68,14 +91,20 @@ export default function ConversationList({
   onSelect,
   onConversationRemoved,
 }: Props) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `convlist_${userIdFromToken(token)}`;
+
+  const [conversations, setConversations] = useState<Conversation[]>(() =>
+    typeof window !== "undefined" ? readCache(cacheKey) : []
+  );
+  const [loading, setLoading] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const isFetchingRef = useRef(false);
 
   useEffect(() => {
     if (!token) return;
 
     let cancelled = false;
+    isFetchingRef.current = true;
 
     const fetchConversations = async () => {
       setLoading(true);
@@ -89,9 +118,15 @@ export default function ConversationList({
         }
 
         const data: Conversation[] = await res.json();
-        if (!cancelled) setConversations(data);
+        if (!cancelled) {
+          setConversations(data);
+          writeCache(cacheKey, data);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          isFetchingRef.current = false;
+        }
       }
     };
 
@@ -100,7 +135,7 @@ export default function ConversationList({
     return () => {
       cancelled = true;
     };
-  }, [token, refreshKey]);
+  }, [token, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const removeConversationFromList = (conversationId: string) => {
     setConversations((current) =>
@@ -179,7 +214,7 @@ export default function ConversationList({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          {loading ? (
+          {loading && conversations.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <div className="flex gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce" />
